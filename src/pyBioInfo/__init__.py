@@ -1,0 +1,2 @@
+def Common():
+    return None
