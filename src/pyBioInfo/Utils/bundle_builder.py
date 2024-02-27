@@ -39,7 +39,7 @@ class BundleBuilder(object):
         self._min_capacity = min_capacity
         self._min_spacing = min_spacing
         self._mode = mode
-        self._keep = keep  # 保留对象，否则的话只返回bundle的范围
+        self._keep = keep  #
 
     def _build_by_start_only_mode(self):
         chrom = None

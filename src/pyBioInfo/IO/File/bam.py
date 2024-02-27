@@ -387,21 +387,23 @@ class Alignment(GRange):
         return self._parsed_md_tag
 
     def get_query_base(self, position):
-        parsed_cigar = self.get_parsed_cigar()
-        query_sequence = self.segment.query_sequence
-        base = None
-        for block in parsed_cigar:
-            if block[3][0] <= position < block[3][1]:
-                if block[0] == "M":
-                    offset = position - block[3][0]
-                    read_idx = block[2][0] + offset
-                    base = query_sequence[read_idx]
-                elif block[0] == "D":
-                    base = "-"
-                else:
-                    assert False
-                break
-        return base
+        return SegmentTools.get_query_base(self.segment, position, self.get_parsed_cigar())
+    
+        # parsed_cigar = self.get_parsed_cigar()
+        # query_sequence = self.segment.query_sequence
+        # base = None
+        # for block in parsed_cigar:
+        #     if block[3][0] <= position < block[3][1]:
+        #         if block[0] == "M":
+        #             offset = position - block[3][0]
+        #             read_idx = block[2][0] + offset
+        #             base = query_sequence[read_idx]
+        #         elif block[0] == "D":
+        #             base = "-"
+        #         else:
+        #             assert False
+        #         break
+        # return base
     
 
 class BamFile(BaseFile):

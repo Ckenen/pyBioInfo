@@ -1,10 +1,37 @@
 # import numpy as np
 from collections import defaultdict
+from functools import cmp_to_key
 import pysam
 # from .bundle_builder import Bundle, BundleBuilder
 
 
 class SegmentTools(object):
+    @classmethod
+    def cmp_for_segments(cls, s1, s2):
+        chrom1, chrom2 = s1.reference_name, s2.reference_name
+        if chrom1 < chrom2:
+            return -1
+        elif chrom1 == chrom2:
+            start1, start2 = s1.reference_start, s2.reference_start
+            if start1 < start2:
+                return -1
+            elif start1 == start2:
+                end1, end2 = s1.reference_end, s2.reference_end
+                if end1 < end2:
+                    return -1
+                elif end1 == end2:
+                    name1, name2 = s1.query_name, s2.query_name
+                    if name1 < name2:
+                        return -1
+                    elif name1 == name2:
+                        return 0
+        return 1
+    
+    @classmethod
+    def sort_segments(cls, segments):
+        return sorted(segments, key=cmp_to_key(cls.cmp_for_segments))
+    
+    
     @classmethod
     def get_blocks(cls, segment, fill_deletion=True):
         blocks = []
@@ -371,7 +398,7 @@ class SegmentTools(object):
         """
         results = []
         rps = segment.reference_start  # ref_position_start
-        rpe = 0  # ref_position_end
+        rpe = rps  # ref_position_end
         mis = 0  # mapped_index_start
         mie = 0  # mapped_index_end
         ris = 0  # read_index_start
@@ -387,7 +414,7 @@ class SegmentTools(object):
                 ris = rie
             elif operation == pysam.CINS:
                 rie = ris + length
-                results.append(("I", (mis, mis), (ris, rie), (rps, rps)))
+                results.append(("I", (mis, mis), (ris, rie), (rps, rpe)))
                 ris = rie
             elif operation == pysam.CDEL:
                 rpe = rps + length
@@ -397,14 +424,16 @@ class SegmentTools(object):
                 mis = mie
             elif operation == pysam.CREF_SKIP:
                 rpe = rps + length
-                results.append(("N", (mis, mis), (ris, ris), (rps, rps)))
+                results.append(("N", (mis, mis), (ris, ris), (rps, rpe)))
                 rps = rpe
             elif operation == pysam.CSOFT_CLIP:
                 rie = ris + length
-                results.append(("S", (mis, mis), (ris, rie), (rps, rps)))
+                results.append(("S", (mis, mis), (ris, rie), (rps, rpe)))
                 ris = rie
             elif operation == pysam.CHARD_CLIP:
-                results.append(("H", (mis, mis), (ris, ris), (rps, rps)))
+                rie = ris + length
+                results.append(("H", (mis, mis), (ris, rie), (rps, rpe)))
+                ris = rie
                 # raise RuntimeError()
             elif operation == pysam.CPAD:
                 raise RuntimeError()
@@ -589,18 +618,43 @@ class SegmentTools(object):
         if parsed_cigar is None:
             parsed_cigar = cls.parse_cigar(segment)
         base = None
-        for block in parsed_cigar:
-            if block[3][0] <= position < block[3][1]:
-                if block[0] == "M":
-                    offset = position - block[3][0]
-                    read_idx = block[2][0] + offset
-                    base = segment.query_sequence[read_idx]
-                elif block[0] == "D":
+        for k, mapped_idxs, read_idxs, contig_idxs in parsed_cigar:
+            if contig_idxs[1] <= position:
+                continue
+            elif contig_idxs[0] > position:
+                break
+            else:
+                if k == "M":
+                    read_idx = position - contig_idxs[0] + read_idxs[0]
+                    if parsed_cigar[0][0] == "H":
+                        i = read_idx - parsed_cigar[0][2][1]
+                    else:
+                        i = read_idx
+                    base = segment.query_sequence[i]
+                elif k == "D":
                     base = "-"
+                elif k == "N":
+                    base = None
                 else:
                     assert False
                 break
+
+        # for block in parsed_cigar:
+        #     if block[3][0] <= position < block[3][1]:
+        #         if block[0] == "M":
+        #             offset = position - block[3][0]
+        #             read_idx = block[2][0] + offset
+        #             base = segment.query_sequence[read_idx]
+        #         elif block[0] == "D":
+        #             base = "-"
+        #         else:
+        #             assert False
+        #         break
+
         return base
+    
+    
+    
     
 class SegmentPair(object):
     """
