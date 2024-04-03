@@ -5,6 +5,7 @@ from .bam import BamFile, Alignment
 
 class Fragment(MRange):
     def __init__(self, segment1, segment2):
+        # assert segment1.query_name == segment2.query_name
         mate1 = Alignment(segment1)
         mate2 = Alignment(segment2)
         super(Fragment, self).__init__(chrom=mate1.chrom,
@@ -34,6 +35,7 @@ class FamFile(BamFile):
             last = None
             for i, segment in enumerate(self._handle.fetch(until_eof=True)):
                 if i % 2 == 1:
+                    assert last.query_name == segment.query_name
                     yield Fragment(last, segment)
                 last = segment
         else:
