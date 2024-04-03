@@ -1,34 +1,30 @@
 import os
-import gzip
 import pysam
+from .file import BaseFile
 from pygz import PigzFile
 from pyBioInfo.Range import TRange
-# from .file_stream import TextFile
 
 
 class BedRecord(TRange):
     pass
 
-class BedFile(object):
-    READ_MODE_NORMAL = 0
-    READ_MODE_RANDOM = 1
-    def __init__(self, path, mode="r", ncol=12):
-        self.path = path
-        self.mode = mode
-        self.ncol = ncol
-        self.rmode = None
-        self.handle = None
 
-        if self.mode == "r":
-            if self.path.endswith(".gz"):
-                if os.path.exists(self.path + ".tbi"):
-                    pass
-                else:
-                    self.handle = PigzFile(self.path, "rt")
-                    self.rmode = self.READ_MODE_NORMAL
+class BedFile(BaseFile):
+    def __init__(self, path, mode="r", ncol=12):
+        super(BedFile, self).__init__(path, mode)
+        self._ncol = ncol
+        self.open()
+
+    @property
+    def ncol(self):
+        return self._ncol
+
+    def open(self):
+        if self._mode == "r":
+            if self._path.endswith(".gz"):
+                self._handle = PigzFile(self.path, "rt")
             else:
-                self.handle = open(self.path)
-                self.rmode = self.READ_MODE_NORMAL
+                self._handle = open(self.path)
         elif self.mode == "w":
             if self.path.endswith(".gz"):
                 self.handle = PigzFile(self.path, "wt")
@@ -37,55 +33,31 @@ class BedFile(object):
         else:
             raise ValueError()
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-
     def close(self):
-        if self.handle:
-            self.handle.close()
-            self.handle = None
-
-    def __iter__(self):
-        if self.rmode is None:
-            self.rmode = self.READ_MODE_NORMAL
-            self.open_for_normal_read()
-        if self.rmode != self.READ_MODE_NORMAL:
-            raise RuntimeError()
-        for line in self.handle:
-            line = line.strip("\n").strip()
-            if line.startswith("#"):
-                continue
-            elif line == "":
-                continue
-            else:
-                yield self.parse_bed_string(line, self.ncol)
-    
-    def write(self, record):
-        line = self.to_bed_string(record, self.ncol)
-        self.handle.write(line + "\n")
-
-    def open_for_random_read(self):
-        assert self.rmode == self.READ_MODE_RANDOM
-        self.handle = pysam.TabixFile(self.path)
-
-    def open_for_normal_read(self):
-        assert self.handle is None
-        assert self.rmode == self.READ_MODE_NORMAL
-        self.handle = gzip.open(self.path, "rt")
+        if self._handle:
+            self._handle.close()
+            self._handle = None
 
     def fetch(self, chrom=None, start=None, end=None):
-        if self.rmode is None:
-            self.rmode = self.READ_MODE_RANDOM
-            self.open_for_random_read()
-        if self.rmode != self.READ_MODE_RANDOM:
-            raise RuntimeError()
+        if chrom is None:
+            for line in self._handle:
+                line = line.strip("\n").strip()
+                if line.startswith("#"):
+                    continue
+                elif line == "":
+                    continue
+                else:
+                    yield self.parse_bed_string(line, self._ncol)
+        else:
+            raise RuntimeError("Random access is not supported! Please try BedFileRandom.")
 
-        for line in self.handle.fetch(chrom, start, end):
-            yield self.parse_bed_string(line, self.ncol)
-
+    def __iter__(self):
+        for x in self.fetch():
+            yield x
+    
+    def write(self, record):
+        line = self.to_bed_string(record, self._ncol)
+        self.handle.write(line + "\n")
 
     @classmethod
     def parse_bed_string(cls, line, column=12):
@@ -129,7 +101,7 @@ class BedFile(object):
 
         if column >= 5:
             score = row[4]
-            if score is not ".":
+            if score != ".":
                 score = float(score)
                 obj.score = score
 
@@ -189,3 +161,25 @@ class BedFile(object):
             columns.append(block_offsets_string)
         line = "\t".join(map(str, columns))
         return line
+ 
+
+class BedFileRandom(BedFile):
+    def __init__(self, path, ncol=12):
+        assert path.endswith(".bed.gz")
+        assert os.path.exists(path)
+        assert os.path.exists(path + ".tbi")
+        super(BedFileRandom, self).__init__(path, "r", ncol)
+
+    def fetch(self, chrom=None, start=None, end=None):
+        for line in self._handle.fetch(chrom, start, end):
+            yield BedFile.parse_bed_string(line, self._ncol)
+
+    def open(self):
+        if self._handle is None:
+            self._handle = pysam.TabixFile(self._path)
+
+    def close(self):
+        if self._handle is not None:
+            self._handle.close()
+            self._handle = None
+
