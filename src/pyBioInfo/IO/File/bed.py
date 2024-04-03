@@ -171,8 +171,13 @@ class BedFileRandom(BedFile):
         super(BedFileRandom, self).__init__(path, "r", ncol)
 
     def fetch(self, chrom=None, start=None, end=None):
-        for line in self._handle.fetch(chrom, start, end):
-            yield BedFile.parse_bed_string(line, self._ncol)
+        if chrom is None:
+            for c in sorted(self._handle.contigs):
+                for line in self._handle.fetch(c):
+                    yield BedFile.parse_bed_string(line, self._ncol)
+        else:
+            for line in self._handle.fetch(chrom, start, end):
+                yield BedFile.parse_bed_string(line, self._ncol)
 
     def open(self):
         if self._handle is None:

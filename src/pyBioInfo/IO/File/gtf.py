@@ -1,5 +1,8 @@
+import os
 from collections import defaultdict, OrderedDict
 import gzip
+import pysam
+from .file import BaseFile
 from pyBioInfo.Range import GRange, CRange, TRange
 from pyBioInfo.Utils import BlockTools
 
@@ -45,92 +48,105 @@ class GtfRecord(CRange):
             return "\t".join(map(str, values))
         else:
             raise NotImplementedError()
+        
 
-
-class GtfFile(object):
-    def __init__(self, path, mode="r"):
-        self.path = path
-        self.mode = mode
+class GtfFile(BaseFile):
+    def __init__(self, path, mode="rt"):
+        super(GtfFile, self).__init__(path, mode)
         self.comments = []
-        self.handle = None
+        self.open()
 
     def open(self):
-        assert self.handle is None
-        if self.path.endswith(".gz"):
-            if self.mode == "r":
-                self.mode = "rt"
-            self.handle = gzip.open(self.path, self.mode)
-        else:
-            self.handle = open(self.path, self.mode)
+        if self._handle is None:
+            if self._mode == "rt":
+                if self._path.endswith(".gz"):
+                    self._handle = gzip.open(self._path, "rt")
+                else:
+                    self._handle = open(self._path, "r")
+            else:
+                RuntimeError("Random access is not supported! Please try GtfFileRandom.")
 
     def close(self):
-        if self.handle:
-            self.handle.close()
-            self.handle = None
+        if self._handle is not None:
+            self._handle.close()
+            self._handle = None
 
-    def write(self):
-        raise NotImplementedError()
-
-    def __enter__(self):
-        self.open()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+    def fetch(self, chrom=None, start=None, end=None):
+        if chrom is None:
+            for line in self._handle:
+                line = line.strip("\n")
+                if line == "":
+                    continue
+                if line.startswith("#"):
+                    self.comments.append(line)
+                else:
+                    yield self.parse_gtf_string(line)
+        else:
+            raise RuntimeError()
 
     def __iter__(self):
-        for line in self.handle:
-            line = line.strip("\n")
-            if line.startswith("#"):
-                self.comments.append(line)
+        for x in self.fetch():
+            yield x
+
+    @classmethod
+    def parse_gtf_string(cls, line):
+        values = line.split("\t")
+        assert len(values) == 9
+        chrom = values[0]
+        source = values[1]
+        feature = values[2]
+        start = int(values[3]) - 1
+        end = int(values[4])
+        score = values[5]
+        strand = values[6]
+        frame = values[7]
+        attributes_str = values[8]
+        assert strand == "+" or strand == "-" or strand == "."
+        assert frame in ["0", "1", "2", "."]
+        attributes = OrderedDict()
+        for item in attributes_str.split(";"):
+            item = item.strip()
+            if item == "":
                 continue
-            values = line.split("\t")
-            # print(line)
-            # print(values)
-            assert len(values) == 9
-            chrom = values[0]
-            source = values[1]
-            feature = values[2]
-            start = int(values[3]) - 1
-            end = int(values[4])
-            score = values[5]
-            strand = values[6]
-            frame = values[7]
-            attributes_str = values[8]
+            x = item.find(" ")
+            k = item[:x]
+            v = item[x + 1:].strip("\"")
+            attributes[k] = v
+        assert "gene_id" in attributes
+        if feature != "gene":
+            assert "transcript_id" in attributes
+        record = GtfRecord(chrom=chrom,
+                            start=start,
+                            end=end,
+                            strand=strand,
+                            score=score,
+                            frame=frame,
+                            source=source,
+                            feature=feature,
+                            attributes=attributes)
+        return record
 
-            assert strand == "+" or strand == "-" or strand == "."
-            assert frame in ["0", "1", "2", "."]
-            # if frame in ["0", "1", "2"]:
-            #     frame = int(frame)
-            # elif frame == ".":
-            #     frame = None
-            # else:
-            #     raise ValueError()
 
-            attributes = OrderedDict()
-            for item in attributes_str.split(";"):
-                item = item.strip()
-                if item == "":
-                    continue
-                x = item.find(" ")
-                k = item[:x]
-                v = item[x + 1:].strip("\"")
-                attributes[k] = v
-            assert "gene_id" in attributes
-            if feature != "gene":
-                assert "transcript_id" in attributes
-            record = GtfRecord(chrom=chrom,
-                               start=start,
-                               end=end,
-                               strand=strand,
-                               score=score,
-                               frame=frame,
-                               source=source,
-                               feature=feature,
-                               attributes=attributes)
-            yield record
+class GtfFileRandom(GtfFile):
+    def __init__(self, path):
+        assert path.endswith(".gz")
+        assert os.path.exists(path)
+        assert os.path.exists(path + ".tbi")
+        super(GtfFileRandom, self).__init__(path, "rt")
 
-# Transcript
+    def open(self):
+        assert self._mode == "rt"
+        if self._handle is None:
+            self._handle = pysam.TabixFile(self._path)
+
+    def fetch(self, chrom=None, start=None, end=None):
+        if chrom is None:
+            for c in sorted(self._handle.contigs):
+                for line in self._handle.fetch(c):
+                    yield GtfFile.parse_gtf_string(line)
+        else:
+            for line in self._handle.fetch(chrom, start, end):
+                yield GtfFile.parse_gtf_string(line)
 
 
 class GtfTranscript(TRange):
@@ -190,14 +206,14 @@ class GtfTranscriptBuilder(object):
         for record in records:
             if record.feature == "gene":
                 genes[record.attributes["gene_id"]] = record
-                continue
-            container[record.attributes["transcript_id"]].append(record)
+            else:
+                container[record.attributes["transcript_id"]].append(record)
 
         transcripts = []
         for transcript_id in container.keys():
             transcript = self.construct_gtf_transcript(
                 container[transcript_id])
-            gene_id = transcript.records["transcript"][0].attributes["gene_id"]
+            gene_id = container[transcript_id][0].attributes["gene_id"]
             if gene_id in genes.keys():
                 assert "gene" not in transcript.records.keys()
                 transcript.records["gene"] = [genes[gene_id]]
@@ -225,8 +241,6 @@ class GtfTranscriptBuilder(object):
                 yield transcript
             chrom = None
             array = None
-
-# Gene
 
 
 class GtfGene(TRange):

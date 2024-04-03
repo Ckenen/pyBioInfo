@@ -1,6 +1,9 @@
+import os
 import gzip
 from collections import OrderedDict, defaultdict
-from pyBioInfo.Range import GRange, TRange, CRange
+import pysam
+from .file import BaseFile
+from pyBioInfo.Range import TRange, CRange
 
 """
 GFF format:
@@ -34,19 +37,6 @@ class GffRecord(CRange):
     def __str__(self):
         return self.format(fmt="GFF")
 
-    # def __repr__(self):
-    #     if self.frame is None:
-    #         frame = "."
-    #     else:
-    #         frame = str(self.frame)
-    #     attri_str = "ID=%s" % self.attributes["ID"]
-    #     if "Parent" in self.attributes:
-    #         attri_str += ";Parent=%s" % self.attributes["Parent"]
-    #     values = [self.chrom, self.source, self.feature,
-    #                 self.start + 1, self.end, self.score,
-    #                 self.strand, frame, attri_str]
-    #     return "\t".join(map(str, values))
-
     def format(self, fmt="GFF"):
         fmt = fmt.upper()
         if fmt == "GFF":
@@ -59,87 +49,102 @@ class GffRecord(CRange):
         else:
             raise NotImplementedError()
 
-
-class GffFile(object):
+class GffFile(BaseFile):
     def __init__(self, path, mode="r"):
-        self.path = path
-        self.mode = mode
+        super(GffFile, self).__init__(path, mode)
         self.comments = []
-        self.handle = None
+        self.open()
 
     def open(self):
-        assert self.handle is None
-        if self.path.endswith(".gz"):
-            if self.mode == "r":
-                self.mode = "rt"
-            self.handle = gzip.open(self.path, self.mode)
-        else:
-            self.handle = open(self.path, self.mode)
-
+        if self._handle is None:
+            if self._path.endswith(".gz"):
+                self._handle = gzip.open(self._path, "rt")
+            else:
+                self._handle = open(self._path)
+    
     def close(self):
-        if self.handle:
-            self.handle.close()
-            self.handle = None
+        if self._handle is not None:
+            self._handle.close()
+            self._handle = None
 
-    def __enter__(self):
-        self.open()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+    def fetch(self, chrom=None, start=None, end=None):
+        if chrom is None:
+            for line in self._handle:
+                line = line.strip("\n")
+                if line == "":
+                    continue
+                if line.startswith("#"):
+                    self.comments.append(line)
+                else:
+                    yield self.parse_gff_string(line)
+        else:
+            RuntimeError("Random access is not supported! Please try GffFileRandom.")
 
     def __iter__(self):
-        for line in self.handle:
-            line = line.strip("\n")
-            if line.startswith("#"):
-                self.comments.append(line)
+        for x in self.fetch():
+            yield x
+
+    @classmethod
+    def parse_gff_string(cls, line):
+        values = line.split("\t")
+        assert len(values) == 9
+        chrom = values[0]
+        source = values[1]
+        feature = values[2]
+        start = int(values[3]) - 1
+        end = int(values[4])
+        score = values[5]
+        strand = values[6]
+        frame = values[7]
+        attributes_str = values[8]
+        # Make sure the strand value is valid
+        assert strand == "+" or strand == "-" or strand == "."
+        # Make sure the frame value is valid
+        assert frame in ["0", "1", "2", "."]
+        # Convert the attributes string to OrderedDict
+        attributes = OrderedDict()
+        for item in attributes_str.split(";"):
+            item = item.strip()
+            if item == "":
                 continue
-            values = line.split("\t")
-            # print(values)
-            assert len(values) == 9
-            chrom = values[0]
-            source = values[1]
-            feature = values[2]
-            start = int(values[3]) - 1
-            end = int(values[4])
-            score = values[5]
-            strand = values[6]
-            frame = values[7]
-            attributes_str = values[8]
+            x = item.find("=")
+            k = item[:x]
+            v = item[x + 1:].strip("\"")
+            attributes[k] = v
+        assert "ID" in attributes
+        name = attributes["ID"]
+        record = GffRecord(chrom=chrom,
+                            start=start,
+                            end=end,
+                            name=name,
+                            strand=strand,
+                            score=score,
+                            frame=frame,
+                            source=source,
+                            feature=feature,
+                            attributes=attributes)
+        return record
+    
 
-            # Make sure the strand value is valid
-            assert strand == "+" or strand == "-" or strand == "."
+class GffFileRandom(GffFile):
+    def __init__(self, path):
+        assert path.endswith(".gz")
+        assert os.path.exists(path)
+        assert os.path.exists(path + ".tbi")
+        super(GffFileRandom, self).__init__(path)
 
-            # Make sure the frame value is valid
-            assert frame in ["0", "1", "2", "."]
-
-
-            # Convert the attributes string to OrderedDict
-            attributes = OrderedDict()
-            for item in attributes_str.split(";"):
-                item = item.strip()
-                if item == "":
-                    continue
-                x = item.find("=")
-                k = item[:x]
-                v = item[x + 1:].strip("\"")
-                attributes[k] = v
-            assert "ID" in attributes
-            name = attributes["ID"]
-
-            record = GffRecord(chrom=chrom,
-                               start=start,
-                               end=end,
-                               name=name,
-                               strand=strand,
-                               score=score,
-                               frame=frame,
-                               source=source,
-                               feature=feature,
-                               attributes=attributes)
-            yield record
-
-# Transcript
+    def open(self):
+        if self._handle is None:
+            self._handle = pysam.TabixFile(self._path)
+            
+    def fetch(self, chrom=None, start=None, end=None):
+        if chrom is None:
+            for c in sorted(self._handle.contigs):
+                for line in self._handle.fetch(c):
+                    yield self.parse_gff_string(line)
+        else:
+            for line in self._handle.fetch(chrom, start, end):
+                yield self.parse_gff_string(line)
 
 
 class GffTranscript(TRange):

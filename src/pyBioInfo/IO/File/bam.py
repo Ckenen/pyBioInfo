@@ -127,10 +127,11 @@ class BamFileRandom(BamFile):
 
     def fetch(self, chrom=None, start=None, end=None):
         if chrom is None:
-            for s in self._handle.fetch(until_eof=True):
-                if s.is_unmapped:
-                    continue
-                yield Alignment(s)
+            for c in list(sorted(self._references)):
+                for s in self._handle.fetch(contig=c):
+                    if s.is_unmapped:
+                        continue
+                    yield Alignment(s)
         else:
             for s in self._handle.fetch(contig=chrom, start=start, stop=end):
                 yield Alignment(s)

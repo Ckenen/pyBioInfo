@@ -66,8 +66,8 @@ class FamFileRandom(FamFile):
 
     def fetch(self, chrom=None, start=None, end=None):
         if chrom is None:
-            for chrom in sorted(self._references.keys()):
-                segments = self._handle.fetch(contig=chrom)
+            for c in sorted(self._references.keys()):
+                segments = self._handle.fetch(contig=c)
                 for pair in SegmentPairBuilder(segments):
                     yield Fragment(pair.mate1, pair.mate2)
         else:
