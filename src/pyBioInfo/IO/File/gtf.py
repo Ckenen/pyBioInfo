@@ -87,6 +87,36 @@ class GtfFile(BaseFile):
     def __iter__(self):
         for x in self.fetch():
             yield x
+            
+    @classmethod
+    def parse_gtf_attribute_string(cls, s):
+        attributes = OrderedDict()
+        key_x, key_y = None, None
+        value_x, value_y = None, None
+        i = 0
+        while i < len(s):
+            c = s[i]
+            if key_x is None:
+                if c != " " and c != ";":
+                    key_x = i
+            else:
+                if key_y is None:
+                    if c == " ":
+                        key_y = i
+                        assert s[i + 1] == "\""
+                else:
+                    if value_x is None:
+                        assert c == "\""
+                        value_x = i + 1
+                    else:
+                        if c == "\"" and s[i - 1] != "\\":
+                            value_y = i
+                            assert s[i + 1] == ";"
+                            attributes[s[key_x:key_y]] = s[value_x:value_y]
+                            key_x, key_y = None, None
+                            value_x, value_y = None, None
+            i += 1
+        return attributes
 
     @classmethod
     def parse_gtf_string(cls, line):
@@ -103,15 +133,16 @@ class GtfFile(BaseFile):
         attributes_str = values[8]
         assert strand == "+" or strand == "-" or strand == "."
         assert frame in ["0", "1", "2", "."]
-        attributes = OrderedDict()
-        for item in attributes_str.split(";"):
-            item = item.strip()
-            if item == "":
-                continue
-            x = item.find(" ")
-            k = item[:x]
-            v = item[x + 1:].strip("\"")
-            attributes[k] = v
+        attributes = cls.parse_gtf_attribute_string(attributes_str)
+        # attributes = OrderedDict()
+        # for item in attributes_str.split(";"):
+        #     item = item.strip()
+        #     if item == "":
+        #         continue
+        #     x = item.find(" ")
+        #     k = item[:x]
+        #     v = item[x + 1:].strip("\"")
+        #     attributes[k] = v
         assert "gene_id" in attributes
         if feature != "gene":
             assert "transcript_id" in attributes
