@@ -216,7 +216,7 @@ class FastaFileRandom(FastaFile):
         if obj:
             strand = obj.strand
             ss = []
-            for bs, be in obj.blocks():
+            for bs, be in obj.blocks:
                 ss.append(self.fetch(chrom=obj.chrom, start=bs, end=be))
             s = "".join(ss)
         else:
