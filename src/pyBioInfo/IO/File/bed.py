@@ -1,7 +1,7 @@
 import os
+import gzip
 import pysam
-from .file import BaseFile
-from pygz import PigzFile
+from .base import BaseFile
 from pyBioInfo.Range import TRange
 
 
@@ -10,9 +10,19 @@ class BedRecord(TRange):
 
 
 class BedFile(BaseFile):
-    def __init__(self, path, mode="r", ncol=12):
+    def __init__(self, path, mode="r", ncol=12, random=None):
+        # automatic set random
+        if mode == "r" and random is None:
+            random = path.endswith(".bed.gz") and os.path.exists(path + ".tbi")
+        
+        if random:
+            assert mode == "r"
+            assert path.endswith(".bed.gz")
+            assert os.path.exists(path)
+            assert os.path.exists(path + ".tbi")
         super(BedFile, self).__init__(path, mode)
         self._ncol = ncol
+        self._random = random
         self.open()
 
     @property
@@ -20,18 +30,22 @@ class BedFile(BaseFile):
         return self._ncol
 
     def open(self):
-        if self._mode == "r":
-            if self._path.endswith(".gz"):
-                self._handle = PigzFile(self.path, "rt")
+        if self._handle is None:
+            if self._random:
+                self._handle = pysam.TabixFile(self._path)
             else:
-                self._handle = open(self.path)
-        elif self.mode == "w":
-            if self.path.endswith(".gz"):
-                self.handle = PigzFile(self.path, "wt")
-            else:
-                self.handle = open(self.path, "w+")
-        else:
-            raise ValueError()
+                if self._mode == "r":
+                    if self._path.endswith(".gz"):
+                        self._handle = gzip.open(self.path, "rt")
+                    else:
+                        self._handle = open(self.path)
+                elif self.mode == "w":
+                    if self.path.endswith(".gz"):
+                        self._handle = gzip.open(self.path, "wt")
+                    else:
+                        self._handle = open(self.path, "w+")
+                else:
+                    raise ValueError()
 
     def close(self):
         if self._handle:
@@ -39,25 +53,30 @@ class BedFile(BaseFile):
             self._handle = None
 
     def fetch(self, chrom=None, start=None, end=None):
-        if chrom is None:
-            for line in self._handle:
-                line = line.strip("\n").strip()
-                if line.startswith("#"):
-                    continue
-                elif line == "":
-                    continue
-                else:
-                    yield self.parse_bed_string(line, self._ncol)
+        if self._random:
+            if chrom is None:
+                for c in sorted(self._handle.contigs):
+                    for line in self._handle.fetch(c):
+                        yield BedFile.parse_bed_string(line, self._ncol)
+            else:
+                for line in self._handle.fetch(chrom, start, end):
+                    yield BedFile.parse_bed_string(line, self._ncol)
         else:
-            raise RuntimeError("Random access is not supported! Please try BedFileRandom.")
-
-    def __iter__(self):
-        for x in self.fetch():
-            yield x
+            if chrom is None:
+                for line in self._handle:
+                    line = line.strip("\n").strip()
+                    if line.startswith("#"):
+                        continue
+                    elif line == "":
+                        continue
+                    else:
+                        yield self.parse_bed_string(line, self._ncol)
+            else:
+                raise RuntimeError("Random access is not supported! Please set random=True.")
     
     def write(self, record):
         line = self.to_bed_string(record, self._ncol)
-        self.handle.write(line + "\n")
+        self._handle.write(line + "\n")
 
     @classmethod
     def parse_bed_string(cls, line, column=12):
@@ -163,28 +182,28 @@ class BedFile(BaseFile):
         return line
  
 
-class BedFileRandom(BedFile):
-    def __init__(self, path, ncol=12):
-        assert path.endswith(".bed.gz")
-        assert os.path.exists(path)
-        assert os.path.exists(path + ".tbi")
-        super(BedFileRandom, self).__init__(path, "r", ncol)
+# class BedFileRandom(BedFile):
+#     def __init__(self, path, ncol=12):
+#         assert path.endswith(".bed.gz")
+#         assert os.path.exists(path)
+#         assert os.path.exists(path + ".tbi")
+#         super(BedFileRandom, self).__init__(path, "r", ncol)
 
-    def fetch(self, chrom=None, start=None, end=None):
-        if chrom is None:
-            for c in sorted(self._handle.contigs):
-                for line in self._handle.fetch(c):
-                    yield BedFile.parse_bed_string(line, self._ncol)
-        else:
-            for line in self._handle.fetch(chrom, start, end):
-                yield BedFile.parse_bed_string(line, self._ncol)
+#     def fetch(self, chrom=None, start=None, end=None):
+#         if chrom is None:
+#             for c in sorted(self._handle.contigs):
+#                 for line in self._handle.fetch(c):
+#                     yield BedFile.parse_bed_string(line, self._ncol)
+#         else:
+#             for line in self._handle.fetch(chrom, start, end):
+#                 yield BedFile.parse_bed_string(line, self._ncol)
 
-    def open(self):
-        if self._handle is None:
-            self._handle = pysam.TabixFile(self._path)
+#     def open(self):
+#         if self._handle is None:
+#             self._handle = pysam.TabixFile(self._path)
 
-    def close(self):
-        if self._handle is not None:
-            self._handle.close()
-            self._handle = None
+#     def close(self):
+#         if self._handle is not None:
+#             self._handle.close()
+#             self._handle = None
 

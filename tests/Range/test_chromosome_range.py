@@ -41,28 +41,28 @@ class TestChromosomeRange(unittest.TestCase):
         array2 = list(range(0, 10))
         array3 = list(range(-10, 0))
         for pos, idx in zip(array1, array2):
-            self.assertEqual(idx, obj.index(pos))
+            self.assertEqual(idx, obj.get_index(pos))
         for idx, pos in zip(array2, array1):
-            self.assertEqual(pos, obj.position(idx))
+            self.assertEqual(pos, obj.get_position(idx))
         for idx, pos in zip(array3, array1):
-            self.assertEqual(pos, obj.position(idx))
+            self.assertEqual(pos, obj.get_position(idx))
 
         obj = CRange("chr1", 10, 20, "name1", "-")
         array1 = list(range(10, 20))
         array2 = list(range(0, 10))
         array3 = list(range(-10, 0))
         for pos, idx in zip(array1, array2[::-1]):
-            self.assertEqual(idx, obj.index(pos))
+            self.assertEqual(idx, obj.get_index(pos))
         for idx, pos in zip(array2, array1[::-1]):
-            self.assertEqual(pos, obj.position(idx))
+            self.assertEqual(pos, obj.get_position(idx))
         for idx, pos in zip(array3, array1[::-1]):
-            self.assertEqual(pos, obj.position(idx))
+            self.assertEqual(pos, obj.get_position(idx))
         for pos, idx in zip(array1, array2):
-            self.assertEqual(idx, obj.index(pos, strandness=False))
+            self.assertEqual(idx, obj.get_index(pos, strandness=False))
         for idx, pos in zip(array2, array1):
-            self.assertEqual(pos, obj.position(idx, strandness=False))
+            self.assertEqual(pos, obj.get_position(idx, strandness=False))
         for idx, pos in zip(array3, array1):
-            self.assertEqual(pos, obj.position(idx, strandness=False))
+            self.assertEqual(pos, obj.get_position(idx, strandness=False))
 
 
 if __name__ == '__main__':

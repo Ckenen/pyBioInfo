@@ -1,7 +1,5 @@
-# import gzip
-from pygz import PigzFile
-# from .file_stream import TextFile
-
+import gzip
+from .base import BaseFile
 
 class FastqRecord(object):
     def __init__(self, name, sequence, quality):
@@ -18,58 +16,46 @@ class FastqRecord(object):
         return s
 
 
-class FastqFile(object):
+class FastqFile(BaseFile):
     def __init__(self, path, mode="r"):
-        self.path = path
-        self.mode = mode
-        self._rtype = None
-        self._wtype = None
-        self._handle = None
-        self._iterator = None
-
-        if self.mode == "r":
-            if self.path.endswith(".gz"):
-                self._handle = PigzFile(self.path, "rt")
+        assert mode == "r" or mode == "w"
+        super(FastqFile, self).__init__(path, mode)
+        self.open()
+        
+    def open(self):
+        if self._handle is None:
+            if self._mode == "r":
+                if self._path.endswith(".gz"):
+                    self._handle = gzip.open(self._path, "rt")
+                else:
+                    self._handle = open(self._path)
+            elif self._mode == "w":
+                if self._path.endswith(".gz"):
+                    self._handle = gzip.open(self._path, "wt")
+                else:
+                    self._handle = open(self._path, "w+")
             else:
-                self._handle = open(self.path)
-        elif self.mode == "w":
-            if self.path.endswith(".gz"):
-                self._handle = PigzFile(self.path, "wt")
-            else:
-                self._handle = open(self.path, "w+")
-        else:
-            raise RuntimeError()
-
-    def __iter__(self):
-        name = None
-        sequence = None
-        for i, line in enumerate(self._handle):
-            line = line.strip("\n")
-            n = i % 4
-            if n == 0:
-                assert line[0] == "@"
-                name = line[1:]
-            elif n == 1:
-                sequence = line
-            elif n == 2:
-                continue
-            else:
-                quality = line
-                yield FastqRecord(name, sequence, quality)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-
-    def __del__(self):
-        self.close()
-
+                raise ValueError()
+    
     def close(self):
-        if self._handle:
+        if self._handle is not None:
             self._handle.close()
             self._handle = None
+    
+    def fetch(self):
+        name, sequence = None, None
+        for i, line in enumerate(self._handle):
+            j = i % 4
+            if j == 0:
+                assert line[0] == "@"
+                name = line[1:-1]
+            elif j == 1:
+                sequence = line[:-1]
+            elif j == 2:
+                continue
+            else:
+                quality = line[:-1]
+                yield FastqRecord(name, sequence, quality)
 
     def write(self, record):
         if isinstance(record, FastqRecord):
@@ -79,9 +65,3 @@ class FastqFile(object):
             self._handle.write("%s\n" % record.quality)
         else:
             raise TypeError()
-
-    def __next__(self):
-        if self._iterator is None:
-            self._iterator = self.__iter__()
-        return next(self._iterator)
-

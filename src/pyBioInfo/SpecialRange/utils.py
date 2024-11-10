@@ -211,7 +211,7 @@ class MismatchEventFactory(object):
         blocks = alignment.blocks
         temp = []
         for idx, rbase, tbase, score in mismatch_events:
-            position = BlockTools.position(blocks, idx, check=False, length=len(alignment))
+            position = BlockTools.get_position(blocks, idx, check=False, length=len(alignment))
             mate = 0
             if segment.is_read1:
                 mate = 1
@@ -324,7 +324,7 @@ class EventFactory(object):
         # deletion_events = []
         temp = []
         for idx, rbase, tbase, score in mismatch_events:
-            position = BlockTools.position(blocks, idx, check=False, length=len(alignment))
+            position = BlockTools.get_position(blocks, idx, check=False, length=len(alignment))
             mate = 0
             if segment.is_read1:
                 mate = 1

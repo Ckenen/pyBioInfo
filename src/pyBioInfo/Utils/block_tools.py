@@ -1,120 +1,323 @@
 import functools
 
-
 class BlockTools(object):
+    
     @classmethod
-    def length(cls, blocks, check=True):
-        if check:
-            cls.check_valid_blocks(blocks)
-        return sum([end - start for start, end in blocks])
+    def check_blocks(cls, blocks):
+        """Ensure the value of the coordinate of blocks are valid.
+        
+        Rules:
+        1. start >= 0
+        2. start >= previous block end
+        3. start < end
+
+        Args:
+            blocks (list): list of blocks.
+
+        Raises:
+            RuntimeError: Empty block list.
+            ValueError: The value of start or end not in compliance with the rules.
+        """
+        if len(blocks) == 0:
+            raise RuntimeError("Empty blocks.")
+        y0 = 0
+        for x, y in blocks:
+            if x < 0: # x >= 0.
+                raise ValueError("Not in compliance with the rules: start (%d) >= 0." % x)
+            if x < y0: # Allow zero-length gap, otherwise x <= y0.
+                raise ValueError("Not in compliance with the rules: start (%d) >= previous block end (%d)." % (x, y0))
+            if x >= y: # Not allow zero-length block, otherwise y < x.
+                raise ValueError("Not in compliance with the rules: start (%d) < end (%d)." % (x, y))
+            y0 = y
+            
+    @classmethod
+    def is_valid_blocks(cls, blocks):
+        """Return whether the blocks are valid.
+
+        Args:
+            blocks (list): list of blocks.
+
+        Returns:
+            bool: `True` if the blocks are valid.
+        """
+        if len(blocks) == 0:
+            return False
+        y0 = 0
+        for x, y in blocks:
+            if x < 0 or x < y0 or x >= y:
+                return False
+            y0 = y
+        return True
+    
+    @classmethod
+    def check_sorted(cls, blocks):
+        """Check the blocks are sorted by coordinates.
+
+        Args:
+            blocks (list): list of blocks.
+
+        Raises:
+            ValueError: The blocks are unsorted.
+        """
+        x0, y0 = None, None
+        for x, y in blocks:
+            if x0 is not None:
+                if (x < x0) or (x == x0 and y < y0):
+                    raise ValueError("The blocks are unsorted!")
+            x0, y0 = x, y
+            
+    @classmethod
+    def is_sorted(cls, blocks):
+        """Return whether the blocks are sorted by coordinates.
+
+        Args:
+            blocks (list): list of blocks.
+
+        Returns:
+            bool: `True` if the blocks are sorted.
+        """
+        x0, y0 = None, None
+        for x, y in blocks:
+            if x0 is not None:
+                if (x < x0) or (x == x0 and y < y0):
+                    return False
+            x0, y0 = x, y
+        return True
+    
+    @classmethod
+    def _full_block_comparison(cls, block1, block2):
+        """Comparison between blocks by both start and end coordinates.
+
+        Args:
+            block1 (list): list of start and end.
+            block2 (list): list of start and end
+
+        Returns:
+            int: return -1 (<), 0 (=) or 1 (>).
+        """
+        x1, y1 = block1
+        x2, y2 = block2
+        if x1 < x2:
+            return -1
+        elif x1 == x2:
+            if y1 < y2:
+                return -1
+            elif y1 == y2:
+                return 0
+        return 1
 
     @classmethod
-    def move(cls, blocks, step=0, check=True):
-        if check:
-            cls.check_valid_blocks(blocks)
-        array = []
-        for start, end in blocks:
-            array.append((start + step, end + step))
-        return array
+    def sorted(cls, blocks):
+        """Sorting blocks.
+
+        Args:
+            blocks (list): list of blocks.
+
+        Returns:
+            list: new list of sorted blocks.
+        """
+        return list(sorted(blocks, key=functools.cmp_to_key(cls._full_block_comparison)))
 
     @classmethod
-    def index(cls, blocks, position, check=True):
-        if check:
-            cls.check_valid_blocks(blocks)
+    def get_length(cls, blocks):
+        """Get the summation length of all blocks.
+
+        Args:
+            blocks (list): list of blocks.
+
+        Returns:
+            int: Summation length of all blocks.
+        """
+        return sum([y - x for x, y in blocks])
+
+    @classmethod
+    def get_index(cls, blocks, position, reverse=False, length=None):
+        """Get the index of certain position in blocks.
+
+        Args:
+            blocks (list): list of blocks.
+            position (int): value of position.
+            reverse (bool, optional): return the reverse index. Defaults to False.
+            length (int, optional): the summation length of all blocks. Defaults to None.
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            int: Index of certain position.
+        """
+        index = None
         offset = 0
-        for start, end in blocks:
-            if end <= position:
-                offset += end - start
-            elif start <= position < end:
-                return position - start + offset
-            elif position < start:
+        for x, y in blocks:
+            if position >= y:
+                offset += y - x
+            elif x <= position < y:
+                index = position - x + offset
                 break
-        raise ValueError("Position (%d) not in blocks." % position)
-
-    @classmethod
-    def is_include(cls, blocks, position, check=True):
-        if check:
-            cls.check_valid_blocks(blocks)
-        for start, end in blocks:
-            if position >= end:
-                continue
-            elif start <= position < end:
-                return True
-            elif position < start:
+            elif position < x:
                 break
-        return False
-
+        if index is None:
+            raise ValueError("Position (%d) not in blocks." % position)
+        if reverse:
+            if length is None:
+                length = cls.get_length(blocks)
+            index = length - 1 - index
+        return index
+    
     @classmethod
-    def position(cls, blocks, index, check=True, length=None):
-        if check:
-            cls.check_valid_blocks(blocks)
+    def get_position(cls, blocks, index, reverse=False, length=None):
+        """Get the position of certain index in blocks.
+
+        Args:
+            blocks (list): _description_
+            index (int): _description_
+            reverse (bool, optional): _description_. Defaults to False.
+            length (int, optional): _description_. Defaults to None.
+
+        Raises:
+            ValueError: _description_
+            RuntimeError: _description_
+
+        Returns:
+            int: Position of certain index.
+        """
+        position = None
         if length is None:
-            length = cls.length(blocks, check=False)
+            length = cls.get_length(blocks)
         if index >= length or index < -length:
-            raise ValueError("Index (%d) out of blocks range (%d <= index < %d)!" % (index, -length, length))
+            raise ValueError("Index (%d) out of blocks range (%d <= index < %d)." % (index, -length, length))
         if index < 0:
             index += length
-        idx2 = 0
-        for start, end in blocks:
-            idx1 = idx2
-            idx2 = idx1 + end - start
-            if idx1 <= index < idx2:
-                return index - idx1 + start
-        raise RuntimeError("Unknown error.")
-
-    @classmethod
-    def gaps(cls, blocks, check=True):
-        if check:
-            cls.check_valid_blocks(blocks)
-        array = []
-        last_start = None
-        last_end = None
-        for start, end in blocks:
-            if last_start is not None:
-                array.append((last_end, start))
-            last_start = start
-            last_end = end
-        return array
-
-    @classmethod
-    def suture(cls, blocks, gap=0, check=True):
-        if check:
-            cls.check_sorted(blocks)
-        array = []
-        last_start = None
-        last_end = None
-        for start, end in blocks:
-            if last_start is None:
-                last_start = start
-                last_end = end
+        if reverse:
+            index = length - 1 - index
+        i1, i2 = 0, 0
+        for x, y in blocks:
+            i1, i2 = i2, i2 + y - x
+            if index >= i2:
+                continue
+            elif i1 <= index < i2:
+                position = index - i1 + x
+                break
             else:
-                if start - last_end <= gap:
-                    last_start = min(last_start, start)
-                    last_end = max(last_end, end)
-                else:
-                    array.append((last_start, last_end))
-                    last_start = start
-                    last_end = end
-        if last_start is not None:
-            array.append((last_start, last_end))
-        return array
+                raise RuntimeError("Unknown error.")
+        return position
+    
+    @classmethod
+    def is_include(cls, blocks, position):
+        """Determine if `position` is included in blocks.
+
+        Args:
+            blocks (list): List of blocks.
+            position (int): Value of position.
+
+        Returns:
+            bool: `True` if `position` is included in blocks, else `False`.
+        """
+        for x, y in blocks:
+            if position >= y:
+                continue
+            elif x <= position < y:
+                return True
+            elif position < x:
+                return False
+        return False
+    
+    @classmethod
+    def move(cls, blocks, step=0):
+        """Move blocks.
+
+        Args:
+            blocks (list): list of blocks (start, end).
+            step (int, optional): steps to move. Defaults to 0.
+
+        Raises:
+            RuntimeError: Invalid blocks after moving.
+
+        Returns:
+            list: new list of blocks.
+        """
+        blocks2 = []
+        if blocks[0][0] + step < 0:
+            raise RuntimeError("Invalid blocks after moving.")
+        for x, y in blocks:
+            blocks2.append((x + step, y + step))
+        return blocks2
 
     @classmethod
-    def fusion(cls, blocks1, blocks2, check=True):
+    def gaps(cls, blocks):
+        """_summary_
+
+        Args:
+            blocks (list): list of blocks.
+
+        Returns:
+            list: list of gaps.
+        """
+        blocks2 = []
+        x0, y0 = None, None
+        for x, y in blocks:
+            if x0 is not None:
+                blocks2.append((y0, x))
+            x0 = x
+            y0 = y
+        return blocks2
+
+    @classmethod
+    def suture(cls, blocks, gap=0):
+        """Filling the gaps between blocks.
+
+        Args:
+            blocks (list): list of blocks.
+            gap (int, optional): maximum gap size. Defaults to 0.
+
+        Returns:
+            list: list of blocks after suturing.
+        """
+        blocks2 = []
+        x0, y0 = None, None
+        for x, y in blocks:
+            if x0 is None:
+                x0, y0 = x, y
+            else:
+                if x - y0 <= gap:
+                    x0, y0 = min(x0, x), max(y0, y)
+                else:
+                    blocks2.append((x0, y0))
+                    x0, y0 = x, y
+        if x0 is not None:
+            blocks2.append((x0, y0))
+        return blocks2
+
+    @classmethod
+    def fusion(cls, blocks1, blocks2):
+        """Merge two lists of blocks into one.
+
+        Args:
+            blocks1 (list): list of blocks.
+            blocks2 (list): another list of blocks.
+
+        Returns:
+            list: list of fusion blocks.
+        """
         blocks = []
         for block in blocks1:
             blocks.append(block)
         for block in blocks2:
             blocks.append(block)
         blocks = list(sorted(blocks, key=lambda item: item[0]))
-        return cls.suture(blocks, 0, check)
+        return cls.suture(blocks, 0)
         
-
     @classmethod
-    def contain(cls, blocks1, blocks2, check=True):
-        if check:
-            cls.check_valid_blocks(blocks1)
-            cls.check_valid_blocks(blocks2)
+    def is_contain(cls, blocks1, blocks2):
+        """_summary_
+
+        Args:
+            blocks1 (list): _description_
+            blocks2 (list): _description_
+
+        Returns:
+            bool: _description_
+        """
         is_contain = True
         length1 = len(blocks1)
         length2 = len(blocks2)
@@ -149,10 +352,16 @@ class BlockTools(object):
         return is_contain
 
     @classmethod
-    def coincide(cls, blocks1, blocks2, check=True):
-        if check:
-            cls.check_valid_blocks(blocks1)
-            cls.check_valid_blocks(blocks2)
+    def is_coincide(cls, blocks1, blocks2):
+        """_summary_
+
+        Args:
+            blocks1 (list): _description_
+            blocks2 (list): _description_
+
+        Returns:
+            bool: _description_
+        """
         is_coincide = True
         length1 = len(blocks1)
         length2 = len(blocks2)
@@ -209,66 +418,8 @@ class BlockTools(object):
 
         return is_coincide
 
-        # flag = True
-        #
-        # i = 0
-        # j = 0
-        # while i < len(blocks2):
-        #     x2, y2 = blocks2[i]
-        #
-        #     while True:
-        #         if j >= len(blocks1):
-        #             flag = False
-        #             break
-        #         x1, y1 = blocks1[j]
-        #
-        #         if x1 < x2:
-        #             if x2 >= y1:
-        #                 j += 1
-        #                 continue
-        #             else:
-        #                 if y1 < y2:
-        #                     flag = False
-        #                     break
-        #                 elif y1 == y2:
-        #                     if i == 0:
-        #                         j += 1
-        #                         break
-        #                     else:
-        #                         flag = False
-        #                         break
-        #                 else:
-        #                     if i == 0 and len(blocks2) == 1:
-        #                         break
-        #                     else:
-        #                         flag = False
-        #                         break
-        #         elif x1 == x2:
-        #             if y1 < y2:
-        #                 flag = False
-        #                 break
-        #             elif y1 == y2:
-        #                 j += 1
-        #                 break
-        #             else:
-        #                 if i == len(blocks2) - 1:
-        #                     break
-        #                 else:
-        #                     flag = False
-        #                     break
-        #         else:
-        #             flag = False
-        #             break
-        #
-        #     if not flag:
-        #         break
-        #
-        #     i += 1
-        #
-        # return flag
-
     @classmethod
-    def clip(cls, blocks, start, end, template=None, check=True,
+    def clip(cls, blocks, start, end, template=None,
              extend=False, extend_left=False, extend_right=False,
              supply=False, supply_left=False, supply_right=False,
              limited=None, suture=False):
@@ -278,11 +429,6 @@ class BlockTools(object):
 
         if start >= end:
             raise ValueError()
-
-        if check:
-            cls.check_valid_blocks(blocks)
-            if template is not None:
-                cls.check_valid_blocks(blocks)
 
         target_start = start
         target_end = end
@@ -364,66 +510,6 @@ class BlockTools(object):
         if suture:
             array = cls.suture(array)
         return array
-
-    @classmethod
-    def _sorted_compare(cls, block1, block2):
-        block_start1, block_end1 = block1
-        block_start2, block_end2 = block2
-        if block_start1 < block_start2:
-            return -1
-        elif block_start1 == block_start2:
-            if block_end1 < block_end2:
-                return -1
-            elif block_end1 == block_end2:
-                return 0
-        return 1
-
-    @classmethod
-    def sorted(cls, blocks):
-        return list(sorted(blocks, key=functools.cmp_to_key(cls._sorted_compare)))
-
-    @classmethod
-    def is_sorted(cls, blocks):
-        last_start = None
-        last_end = None
-        for start, end in blocks:
-            if last_start is not None:
-                if (start < last_start) or (start == last_start and end < last_end):
-                    return False
-            last_start = start
-            last_end = end
-        return True
-
-    @classmethod
-    def check_sorted(cls, blocks):
-        last_start = None
-        last_end = None
-        for start, end in blocks:
-            if last_start is not None:
-                if (start < last_start) or (start == last_start and end < last_end):
-                    raise ValueError("The blocks is unsorted!")
-            last_start = start
-            last_end = end
-
-    @classmethod
-    def check_valid_blocks(cls, blocks):
-        last_end = 0
-        for start, end in blocks:
-            if start < 0:
-                raise ValueError("The value of start (%d) must be larger or equal to 0." % (start))
-            if start >= end:
-                raise ValueError("The value of start (%d) must be lower than that of the end (%d)." % (start, end))
-            if start < last_end:
-                raise ValueError("The value of start (%d) must be larger or equal to the end (%d) of the previous block." % (start, last_end))
-            last_end = end
-
-    @classmethod
-    def is_valid_blocks(cls, blocks):
-        try:
-            cls.check_valid_blocks(blocks)
-            return True
-        except ValueError:
-            return False
 
     @classmethod
     def extend(cls, blocks, left=0, right=0, template=None, extend=False, supply=False, trim=False,

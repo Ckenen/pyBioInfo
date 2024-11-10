@@ -30,7 +30,7 @@ class CRange(IRange):
     def is_reverse(self):
         return self.strand == "-"
 
-    def index(self, position, strandness=True):
+    def get_index(self, position, strandness=True):
         if self.start <= position < self.end:
             if strandness and self.is_reverse:
                 return self.end - position - 1
@@ -38,7 +38,7 @@ class CRange(IRange):
                 return position - self.start
         raise ValueError("Position %d is out of range %d-%d." % (position, self.start, self.end))
 
-    def position(self, index, strandness=True):
+    def get_position(self, index, strandness=True):
         length = len(self)
         if -length <= index < 0:
             if strandness and self.is_reverse:

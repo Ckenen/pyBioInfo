@@ -37,23 +37,23 @@ class TestGenomicRange(unittest.TestCase):
         array2 = list(range(30))
         array3 = list(range(-30, 0))
         for pos, idx in zip(array1, array2):
-            self.assertEqual(pos, obj.position(idx, strandness=False))
-            self.assertEqual(idx, obj.index(pos, strandness=False))
+            self.assertEqual(pos, obj.get_position(idx, strandness=False))
+            self.assertEqual(idx, obj.get_index(pos, strandness=False))
         for pos, idx in zip(array1, array3):
-            self.assertEqual(pos, obj.position(idx, strandness=False))
+            self.assertEqual(pos, obj.get_position(idx, strandness=False))
 
         for pos, idx in zip(array1[::-1], array2):
-            self.assertEqual(pos, obj.position(idx, strandness=True))
-            self.assertEqual(idx, obj.index(pos, strandness=True))
+            self.assertEqual(pos, obj.get_position(idx, strandness=True))
+            self.assertEqual(idx, obj.get_index(pos, strandness=True))
         for pos, idx in zip(array1[::-1], array3):
-            self.assertEqual(pos, obj.position(idx, strandness=True))
+            self.assertEqual(pos, obj.get_position(idx, strandness=True))
 
-        self.assertRaises(ValueError, obj.index, 9)
-        self.assertRaises(ValueError, obj.index, 21)
-        self.assertRaises(ValueError, obj.index, 25)
-        self.assertRaises(ValueError, obj.index, 71)
-        self.assertRaises(ValueError, obj.position, -31)
-        self.assertRaises(ValueError, obj.position, 30)
+        self.assertRaises(ValueError, obj.get_index, 9)
+        self.assertRaises(ValueError, obj.get_index, 21)
+        self.assertRaises(ValueError, obj.get_index, 25)
+        self.assertRaises(ValueError, obj.get_index, 71)
+        self.assertRaises(ValueError, obj.get_position, -31)
+        self.assertRaises(ValueError, obj.get_position, 30)
 
 
 if __name__ == '__main__':

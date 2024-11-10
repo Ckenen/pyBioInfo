@@ -12,9 +12,9 @@ class TRange(GRange):
                 raise ValueError("The value of thick start[%d] can not smaller than start[%d]." % (thick_start, self.start))
             if thick_end > self.end:
                 raise ValueError("The value of thick end[%d] can not larger than end[%d]." % (thick_end, self.end))
-            if not BlockTools.is_include(self.blocks, thick_start, check=False):
+            if not BlockTools.is_include(self.blocks, thick_start):
                 raise ValueError("The value of thick start[%d] is not included in blocks." % thick_start)
-            if not BlockTools.is_include(self.blocks, thick_end - 1, check=False):
+            if not BlockTools.is_include(self.blocks, thick_end - 1):
                 raise ValueError("The value of thick end[%d] is not included in blocks." % thick_end)
             thick = (thick_start, thick_end)
         self._thick = thick
@@ -43,8 +43,8 @@ class TRange(GRange):
                 thick = self.thick
                 if thick is not None:
                     thick_start, thick_end = thick
-                    i2 = self.index(thick_start)
-                    i3 = self.index(thick_end - 1)
+                    i2 = self.get_index(thick_start)
+                    i3 = self.get_index(thick_end - 1)
                     i2, i3 = min(i2, i3), max(i2, i3) + 1
                 self._cache_reverse_indexes = (i1, i2, i3, i4)
             indexes = self._cache_reverse_indexes
@@ -57,8 +57,8 @@ class TRange(GRange):
                 thick = self.thick
                 if thick is not None:
                     thick_start, thick_end = thick
-                    i2 = self.index(thick_start, strandness=False)
-                    i3 = self.index(thick_end - 1, strandness=False)
+                    i2 = self.get_index(thick_start, strandness=False)
+                    i3 = self.get_index(thick_end - 1, strandness=False)
                     i2, i3 = min(i2, i3), max(i2, i3) + 1
                 self._cache_forward_indexes = (i1, i2, i3, i4)
             indexes = self._cache_forward_indexes

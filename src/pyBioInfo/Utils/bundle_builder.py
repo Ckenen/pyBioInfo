@@ -122,7 +122,7 @@ class BundleBuilder(object):
                     if self._keep:
                         data = [obj]
                 else:
-                    raise RuntimeError()
+                    raise RuntimeError("Error: %s < %s" % (obj.chrom, chrom))
             last = obj
         if chrom:
             yield Bundle(chrom, start_min, start_max, end_min, end_max, self._mode, count, data)

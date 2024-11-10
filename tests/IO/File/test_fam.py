@@ -10,7 +10,7 @@ class TestFamFile(unittest.TestCase):
     def test_fam_file(self):    
         path1 = os.path.join(DIR, "data/test.bam")
         path2 = os.path.join(DIR, "data/test.fam")
-        with FamFile(path1) as f, FamFile(path2, "wb", template=f) as fw:
+        with FamFile(path1, random=True) as f, FamFile(path2, "wb", template=f) as fw:
             for record in f:
                 fw.write(record)
 

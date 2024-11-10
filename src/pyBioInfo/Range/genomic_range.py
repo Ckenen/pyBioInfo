@@ -5,13 +5,10 @@ from pyBioInfo.Utils import BlockTools
 
 
 class GRange(CRange):
-    # block使用元组，防止数值被修改
-    # 不使用slot，允许添加新的属性
-
     def __init__(self, chrom, start=None, end=None, name=None, strand=None, blocks=None):
         if blocks:
             blocks = tuple([(block_start, block_end) for block_start, block_end in blocks])
-            BlockTools.check_valid_blocks(blocks)
+            BlockTools.check_blocks(blocks)
             if start and start != blocks[0][0]:
                 raise ValueError("Inconsistent value of start and blocks.")
             if end and end != blocks[-1][1]:
@@ -19,10 +16,9 @@ class GRange(CRange):
         else:
             assert start is not None and end is not None
             blocks = tuple([(start, end)])
-        assert blocks
         super(GRange, self).__init__(chrom=chrom, start=blocks[0][0], end=blocks[-1][1], name=name, strand=strand)
         self._blocks = blocks
-        self._cache_length = sum([e - s for s, e in blocks])
+        self._cache_length = sum([y - x for x, y in blocks])
 
     # Access to protected attributes.
 
@@ -33,14 +29,17 @@ class GRange(CRange):
     # string format and length.
 
     def __str__(self):
-        return "%s: %d-%d [strand: %s, block count: %d]" % (self.__class__.__name__, self._start, self._end, self.strand, len(self._blocks))
+        return "%s: %d-%d [strand: %s, blocks: %d]" % (
+            self.__class__.__name__, 
+            self._start, self._end, 
+            self.strand, len(self._blocks))
 
     def __len__(self):
         return self._cache_length
 
     # index-position relevant operations.
 
-    def position(self, index, strandness=True):
+    def get_position(self, index, strandness=True):
         length = len(self)
         if -length <= index < length:
             if strandness and self.is_reverse:
@@ -48,23 +47,20 @@ class GRange(CRange):
                     index = length - 1 - index
                 else:
                     index = -length - 1 - index
-            return BlockTools.position(self.blocks, index, check=False, length=length)
+            return BlockTools.get_position(self.blocks, index, length=length)
         else:
             raise ValueError("Index (%d) is out of range [%d-%d]." % (index, -length, length))
 
-    def index(self, position, strandness=True):
-        index = BlockTools.index(self.blocks, position, check=False)
-        if strandness and self.is_reverse:
-            index = len(self) - 1 - index
-        return index
+    def get_index(self, position, strandness=True):
+        return BlockTools.get_index(self.blocks, position, reverse=self.is_reverse and strandness)
 
     # Relationship
 
-    def contain(self, other):
-        return BlockTools.contain(self.blocks, other.blocks)
+    def is_contain(self, other):
+        return BlockTools.is_contain(self.blocks, other.blocks)
 
-    def coincide(self, other):
-        return BlockTools.coincide(self.blocks, other.blocks)
+    def is_coincide(self, other):
+        return BlockTools.is_coincide(self.blocks, other.blocks)
 
     def clip(self, start, end):
         blocks = BlockTools.clip(blocks=self.blocks, start=start, end=end, extend=False, check=False)

@@ -33,8 +33,7 @@ class IRange(object):
     def __getitem__(self, item):
         """
         IRange is an list.
-        start = obj[0]
-        end = obj[1]
+        start, end = obj[0], obj[1]
         """
         if item == 0:
             return self.start
@@ -55,12 +54,12 @@ class IRange(object):
     
     # Position-index system.
 
-    def index(self, position):
+    def get_index(self, position):
         if self.start <= position < self.end:
             return position - self.start
         raise ValueError("Position %d is out of range %d-%d." % (position, self.start, self.end))
 
-    def position(self, index):
+    def get_position(self, index):
         length = len(self)
         if -length <= index < 0:
             return self.end + index
@@ -102,23 +101,23 @@ class IRange(object):
         end = min(self.end, other.end)
         return start - end
 
-    def overlap(self, other):
+    def is_overlap(self, other):
         return self._distance(other) < 0
 
-    def adjacent(self, other):
+    def is_adjacent(self, other):
         return self._distance(other) == 0
 
-    def away(self, other):
+    def is_away(self, other):
         return self._distance(other) > 0
 
-    def contact(self, other):
+    def is_contact(self, other):
         return self._distance(other) <= 0
 
-    def contain(self, other):
+    def is_contain(self, other):
         return self.start <= other.start and self.end >= other.end
 
-    def coincide(self, other):
-        return self.contain(other)
+    def is_coincide(self, other):
+        return self.is_contain(other)
 
     # Others
 

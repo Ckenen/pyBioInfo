@@ -19,20 +19,37 @@ class TestFastaFile(unittest.TestCase):
         self.assertTrue(filecmp.cmp(path2, path3))
 
         # Random access
-        with FastaFile(path2) as f:
-            seq = f.fetch("seq1", 40, 50)
+        with FastaFile(path2, random=True) as f:
+            seq = list(f.fetch("seq1", 40, 50))[0].sequence
             self.assertEqual("CAATACTTTC", seq)
 
-            seq = f.fetch("seq1", 50, 60)
+            seq = list(f.fetch("seq1", 50, 60))[0].sequence
             self.assertEqual("TACCAGCTAT", seq)
 
-            seq = f.fetch("seq1", 45, 55)
+            seq = list(f.fetch("seq1", 45, 55))[0].sequence
             self.assertEqual("CTTTCTACCA", seq)
 
             obj = GRange(chrom="seq1", blocks=[(40, 45), (55, 60)], strand="-")
-            seq = f.fetch(obj=obj, strandness=False)
+            seq = list(f.fetch(obj=obj, strandness=False))[0].sequence
             self.assertEqual("CAATAGCTAT", seq)
-            seq = f.fetch(obj=obj)
+            seq = list(f.fetch(obj=obj))[0].sequence
+            self.assertEqual("ATAGCTATTG", seq)
+            
+        # Fast random access
+        with FastaFile(path2, random=True) as f:
+            seq = f.fast_fetch("seq1", 40, 50)
+            self.assertEqual("CAATACTTTC", seq)
+
+            seq = f.fast_fetch("seq1", 50, 60)
+            self.assertEqual("TACCAGCTAT", seq)
+
+            seq = f.fast_fetch("seq1", 45, 55)
+            self.assertEqual("CTTTCTACCA", seq)
+
+            obj = GRange(chrom="seq1", blocks=[(40, 45), (55, 60)], strand="-")
+            seq = f.fast_fetch(obj=obj, strandness=False)
+            self.assertEqual("CAATAGCTAT", seq)
+            seq = f.fast_fetch(obj=obj)
             self.assertEqual("ATAGCTATTG", seq)
 
 

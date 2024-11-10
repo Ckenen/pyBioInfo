@@ -2,7 +2,7 @@ import os
 import gzip
 from collections import OrderedDict, defaultdict
 import pysam
-from .file import BaseFile
+from .base import BaseFile
 from pyBioInfo.Range import TRange, CRange
 
 """
@@ -48,41 +48,66 @@ class GffRecord(CRange):
             return "\t".join(map(str, values))
         else:
             raise NotImplementedError()
-
+              
+                
 class GffFile(BaseFile):
-    def __init__(self, path, mode="r"):
+    def __init__(self, path, mode="r", random=None):
+        if mode == "r" and random is None:
+            random = path.endswith(".gff.gz") and os.path.exists(path + ".tbi")
+            
+        if random:
+            assert mode == "r"
+            assert path.endswith(".gz")
+            assert os.path.exists(path)
+            assert os.path.exists(path + ".tbi")
         super(GffFile, self).__init__(path, mode)
         self.comments = []
+        self._random = random
         self.open()
 
     def open(self):
         if self._handle is None:
-            if self._path.endswith(".gz"):
-                self._handle = gzip.open(self._path, "rt")
+            if self._random:
+                self._handle = pysam.TabixFile(self._path)
             else:
-                self._handle = open(self._path)
-    
+                if self._mode == "r":
+                    if self._path.endswith(".gz"):
+                        self._handle = gzip.open(self._path, "rt")
+                    else:
+                        self._handle = open(self._path)
+                else:
+                    if self._path.endswith(".gz"):
+                        self._handle = gzip.open(self._path, "wt")
+                    else:
+                        self._handle = open(self._path, "w+")
+                    
     def close(self):
         if self._handle is not None:
             self._handle.close()
             self._handle = None
 
     def fetch(self, chrom=None, start=None, end=None):
-        if chrom is None:
-            for line in self._handle:
-                line = line.strip("\n")
-                if line == "":
-                    continue
-                if line.startswith("#"):
-                    self.comments.append(line)
-                else:
+        if self._random:
+            if chrom is None:
+                for c in sorted(self._handle.contigs):
+                    for line in self._handle.fetch(c):
+                        yield self.parse_gff_string(line)
+            else:
+                for line in self._handle.fetch(chrom, start, end):
                     yield self.parse_gff_string(line)
         else:
-            RuntimeError("Random access is not supported! Please try GffFileRandom.")
+            if chrom is None:
+                for line in self._handle:
+                    line = line.strip("\n")
+                    if line == "":
+                        continue
+                    if line.startswith("#"):
+                        self.comments.append(line)
+                    else:
+                        yield self.parse_gff_string(line)
+            else:
+                RuntimeError("Random access is not supported! Please set random=True.")
 
-    def __iter__(self):
-        for x in self.fetch():
-            yield x
 
     @classmethod
     def parse_gff_string(cls, line):
@@ -125,28 +150,7 @@ class GffFile(BaseFile):
                             attributes=attributes)
         return record
     
-
-class GffFileRandom(GffFile):
-    def __init__(self, path):
-        assert path.endswith(".gz")
-        assert os.path.exists(path)
-        assert os.path.exists(path + ".tbi")
-        super(GffFileRandom, self).__init__(path)
-
-    def open(self):
-        if self._handle is None:
-            self._handle = pysam.TabixFile(self._path)
-            
-    def fetch(self, chrom=None, start=None, end=None):
-        if chrom is None:
-            for c in sorted(self._handle.contigs):
-                for line in self._handle.fetch(c):
-                    yield self.parse_gff_string(line)
-        else:
-            for line in self._handle.fetch(chrom, start, end):
-                yield self.parse_gff_string(line)
-
-
+    
 class GffTranscript(TRange):
     def __init__(self, chrom, start, end, name, strand, blocks, thick, records):
         super(GffTranscript, self).__init__(chrom=chrom,

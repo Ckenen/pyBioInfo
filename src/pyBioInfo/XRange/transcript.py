@@ -41,24 +41,24 @@ class Transcript(GRange):
         cds = self.cds
         if cds is None:
             return None
-        index1 = self.index(cds[0])
-        index2 = self.index(cds[1] - 1)
+        index1 = self.get_index(cds[0])
+        index2 = self.get_index(cds[1] - 1)
         return index2 - index1 + 1
 
     def get_utr5_length(self):
         utr5 = self.utr5
         if utr5 is None:
             return None
-        index1 = self.index(utr5[0])
-        index2 = self.index(utr5[1] - 1)
+        index1 = self.get_index(utr5[0])
+        index2 = self.get_index(utr5[1] - 1)
         return index2 - index1 + 1
 
     def get_utr3_length(self):
         utr3 = self.utr3
         if utr3 is None:
             return None
-        index1 = self.index(utr3[0])
-        index2 = self.index(utr3[1] - 1)
+        index1 = self.get_index(utr3[0])
+        index2 = self.get_index(utr3[1] - 1)
         return index2 - index1 + 1
 
     def distance_base(self, position):
@@ -71,9 +71,9 @@ class Transcript(GRange):
         if cds is None:
             return None, None, None, None
         else:
-            i2 = self.index(cds[0])
-            i3 = self.index(cds[1] - 1)
-            i5 = self.index(position)
+            i2 = self.get_index(cds[0])
+            i3 = self.get_index(cds[1] - 1)
+            i5 = self.get_index(position)
             if self.forward:
                 # i2 = i2
                 i3 = i3 + 1
@@ -91,9 +91,9 @@ class Transcript(GRange):
         if cds is None:
             return None
         else:
-            i2 = self.index(cds[0])
-            i3 = self.index(cds[1] - 1)
-            i5 = self.index(position)
+            i2 = self.get_index(cds[0])
+            i3 = self.get_index(cds[1] - 1)
+            i5 = self.get_index(position)
 
             if self.forward:
                 # i2 = i2

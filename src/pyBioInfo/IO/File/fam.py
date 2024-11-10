@@ -26,20 +26,42 @@ class Fragment(MRange):
 
 
 class FamFile(BamFile):
-    def __init__(self, path, mode="rb", template=None, header=None):
+    def __init__(self, path, mode="rb", template=None, header=None, random=None):
+        if mode[0] == "r" and random is None:
+            random = path.endswith(".bam") and os.path.exists(path + ".bai")
+        
+        if random:
+            assert path.endswith(".bam")
+            assert os.path.exists(path)
+            assert os.path.exists(path + ".bai")
+        else:
+            if os.path.exists(path + ".bai"):
+                # random access is supported!
+                pass
         assert mode == "rb" or mode == "wb"
-        super(FamFile, self).__init__(path, mode, template, header)
+        super(FamFile, self).__init__(path, mode, template, header, random=random)
 
     def fetch(self, chrom=None, start=None, end=None):
-        if chrom is None:
-            last = None
-            for i, segment in enumerate(self._handle.fetch(until_eof=True)):
-                if i % 2 == 1:
-                    assert last.query_name == segment.query_name
-                    yield Fragment(last, segment)
-                last = segment
+        if self._random:
+            if chrom is None:
+                for c in sorted(self._references.keys()):
+                    segments = self._handle.fetch(contig=c)
+                    for pair in SegmentPairBuilder(segments):
+                        yield Fragment(pair.mate1, pair.mate2)
+            else:
+                segments = self._handle.fetch(contig=chrom, start=start, stop=end)
+                for pair in SegmentPairBuilder(segments):
+                    yield Fragment(pair.mate1, pair.mate2)
         else:
-            raise RuntimeError("Random access is not supported! Please try FamFileRandom.")
+            if chrom is None:
+                last = None
+                for i, segment in enumerate(self._handle.fetch(until_eof=True)):
+                    if i % 2 == 1:
+                        assert last.query_name == segment.query_name
+                        yield Fragment(last, segment)
+                    last = segment
+            else:
+                raise RuntimeError("Random access is not supported! Please set random=True.")
 
     def write(self, obj):
         if isinstance(obj, Fragment):
@@ -49,28 +71,28 @@ class FamFile(BamFile):
             super(FamFile, self).write(obj)
 
 
-class FamFileRandom(FamFile):
-    def __init__(self, path):
-        assert path.endswith(".bam")
-        assert os.path.exists(path)
-        assert os.path.exists(path + ".bai")
-        super(FamFileRandom, self).__init__(path, "rb")
+# class FamFileRandom(FamFile):
+#     def __init__(self, path):
+#         assert path.endswith(".bam")
+#         assert os.path.exists(path)
+#         assert os.path.exists(path + ".bai")
+#         super(FamFileRandom, self).__init__(path, "rb")
 
-    @property
-    def handle(self):
-        return self._handle
+#     @property
+#     def handle(self):
+#         return self._handle
     
-    @property
-    def references(self):
-        return self._references
+#     @property
+#     def references(self):
+#         return self._references
 
-    def fetch(self, chrom=None, start=None, end=None):
-        if chrom is None:
-            for c in sorted(self._references.keys()):
-                segments = self._handle.fetch(contig=c)
-                for pair in SegmentPairBuilder(segments):
-                    yield Fragment(pair.mate1, pair.mate2)
-        else:
-            segments = self._handle.fetch(contig=chrom, start=start, stop=end)
-            for pair in SegmentPairBuilder(segments):
-                yield Fragment(pair.mate1, pair.mate2)
+#     def fetch(self, chrom=None, start=None, end=None):
+#         if chrom is None:
+#             for c in sorted(self._references.keys()):
+#                 segments = self._handle.fetch(contig=c)
+#                 for pair in SegmentPairBuilder(segments):
+#                     yield Fragment(pair.mate1, pair.mate2)
+#         else:
+#             segments = self._handle.fetch(contig=chrom, start=start, stop=end)
+#             for pair in SegmentPairBuilder(segments):
+#                 yield Fragment(pair.mate1, pair.mate2)

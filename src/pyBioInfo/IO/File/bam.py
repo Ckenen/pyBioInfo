@@ -1,6 +1,7 @@
 import os
+import logging
 import pysam
-from .file import BaseFile
+from .base import BaseFile
 from pyBioInfo.Range import GRange
 from pyBioInfo.Utils import SegmentTools
 
@@ -49,11 +50,27 @@ class Alignment(GRange):
     
 
 class BamFile(BaseFile):
-    def __init__(self, path, mode="rb", template=None, header=None):
+    def __init__(self, path, mode="rb", template=None, header=None, random=None):
+        if mode[0] == "r" and random is None:
+            if path.endswith(".bam"):
+                if os.path.exists(path + ".bai"):
+                    logging.warning("Index file exists, automatic set random=True")
+                    random = True
+                else:
+                    logging.warning("Index file does not exists, automatic set random=False")
+                    random = False
+            else:
+                random = False
+        
+        if random:
+            assert path.endswith(".bam")
+            assert os.path.exists(path)
+            assert os.path.exists(path + ".bai")
         assert mode == "rb" or mode == "wb"
         self._template = template
         self._header = header
         self._references = None
+        self._random = random
         super(BamFile, self).__init__(path, mode)
         self.open()
 
@@ -88,7 +105,7 @@ class BamFile(BaseFile):
             else:
                 raise RuntimeError()
             self._references = dict()
-            for item in self.handle.header["SQ"]:
+            for item in self._handle.header["SQ"]:
                 self._references[item["SN"]] = item["LN"]
 
     def close(self):
@@ -97,13 +114,24 @@ class BamFile(BaseFile):
             self._handle = None
 
     def fetch(self, chrom=None, start=None, end=None):
-        if chrom is None:
-            for segment in self._handle.fetch(until_eof=True):
-                if segment.is_unmapped:
-                    continue
-                yield Alignment(segment)
+        if self._random:
+            if chrom is None:
+                for c in list(sorted(self._references)):
+                    for s in self._handle.fetch(contig=c):
+                        if s.is_unmapped:
+                            continue
+                        yield Alignment(s)
+            else:
+                for s in self._handle.fetch(contig=chrom, start=start, stop=end):
+                    yield Alignment(s)
         else:
-            raise RuntimeError("Random access is not supported! Please try BamFileRandom.")
+            if chrom is None:
+                for segment in self._handle.fetch(until_eof=True):
+                    if segment.is_unmapped:
+                        continue
+                    yield Alignment(segment)
+            else:
+                raise RuntimeError("Random access is not supported! Please set random=True.")
 
     def write(self, obj):
         if isinstance(obj, Alignment):
@@ -113,25 +141,20 @@ class BamFile(BaseFile):
         else:
             raise TypeError("Unsupported record type: %s!" % type(obj))
 
-    def __iter__(self):
-        for obj in self.fetch():
-            yield obj
+# class BamFileRandom(BamFile):
+#     def __init__(self, path):
+#         assert path.endswith(".bam")
+#         assert os.path.exists(path)
+#         assert os.path.exists(path + ".bai")
+#         super(BamFileRandom, self).__init__(path, "rb")
 
-
-class BamFileRandom(BamFile):
-    def __init__(self, path):
-        assert path.endswith(".bam")
-        assert os.path.exists(path)
-        assert os.path.exists(path + ".bai")
-        super(BamFileRandom, self).__init__(path, "rb")
-
-    def fetch(self, chrom=None, start=None, end=None):
-        if chrom is None:
-            for c in list(sorted(self._references)):
-                for s in self._handle.fetch(contig=c):
-                    if s.is_unmapped:
-                        continue
-                    yield Alignment(s)
-        else:
-            for s in self._handle.fetch(contig=chrom, start=start, stop=end):
-                yield Alignment(s)
+#     def fetch(self, chrom=None, start=None, end=None):
+#         if chrom is None:
+#             for c in list(sorted(self._references)):
+#                 for s in self._handle.fetch(contig=c):
+#                     if s.is_unmapped:
+#                         continue
+#                     yield Alignment(s)
+#         else:
+#             for s in self._handle.fetch(contig=chrom, start=start, stop=end):
+#                 yield Alignment(s)

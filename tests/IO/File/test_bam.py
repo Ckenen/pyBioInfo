@@ -33,7 +33,7 @@ class TestBamFile(unittest.TestCase):
                 fw.write(obj)
                 
         path5 = os.path.join(DIR, "data/test.bam.out.bam.bed")
-        with BamFile(path4, require_index=False) as f, open(path5, "w+") as fw:
+        with BamFile(path4) as f, open(path5, "w+") as fw:
             for obj in f:
                 fw.write(obj.format("BED") + "\n")
         self.assertTrue(filecmp.cmp(path3, path5))

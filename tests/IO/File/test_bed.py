@@ -51,7 +51,7 @@ class TestBedFile(unittest.TestCase):
         """
         path1 = os.path.join(DIR, "data/test.bed.gz")
         path2 = os.path.join(DIR, "data/test.bed.gz.out.gz")
-        with BedFile(path1) as bed, BedFile(path2, "w") as fw:
+        with BedFile(path1, random=True) as bed, BedFile(path2, "w") as fw:
             for item in bed.fetch("chr1", 14403, 29570):
                 fw.write(item)
         names = [
