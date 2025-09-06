@@ -31,42 +31,46 @@ class SegmentTools(object):
     def sort_segments(cls, segments):
         return sorted(segments, key=cmp_to_key(cls.cmp_for_segments))
     
-    
     @classmethod
     def get_blocks(cls, segment, fill_deletion=True):
-        blocks = []
-        x = None  # block start
-        y = None  # block end
-        y0 = segment.reference_start  # last end
-        cigartuples = segment.cigartuples
-        for i in range(len(cigartuples)):
-            flag, count = cigartuples[i]
-            if flag == pysam.CMATCH:  # M
-                x, y = y0, y0 + count
-                y0 = y
-                if len(blocks) == 0:
-                    blocks.append([x, y])
-                elif x == blocks[-1][1]:
-                    blocks[-1][1] = y
-            elif flag == pysam.CDEL:  # D
-                x, y = y0, y0 + count
-                y0 = y
-                if fill_deletion:
-                    if len(blocks) == 0:
-                        blocks.append([x, y])
-                    elif x == blocks[-1][1]:
-                        blocks[-1][1] = y
-            elif flag == pysam.CREF_SKIP:  # N
-                y0 = y0 + count
-            elif flag == pysam.CINS:  # I
-                continue
-            elif flag == pysam.CSOFT_CLIP:  # S
-                continue
-            elif flag == pysam.CHARD_CLIP:  # H
-                continue
-            else:
-                raise RuntimeError("Unknown cigar flag: %s" % flag)
-        return blocks
+        return cls.get_block_from_segment(segment, fill_deletion)    
+        # blocks = []
+        # x = None  # block start
+        # y = None  # block end
+        # y0 = segment.reference_start  # last end
+        # cigartuples = segment.cigartuples
+        # for i in range(len(cigartuples)):
+        #     flag, count = cigartuples[i]
+        #     if flag == pysam.CMATCH:  # M
+        #         x, y = y0, y0 + count
+        #         y0 = y
+        #         if len(blocks) > 0 and x == blocks[-1][1]:
+        #             blocks[-1][1] = y
+        #         else:
+        #             blocks.append([x, y])
+        #     elif flag == pysam.CDEL:  # D
+        #         x, y = y0, y0 + count
+        #         y0 = y
+        #         if fill_deletion:
+        #             # if len(blocks) == 0:
+        #             #     blocks.append([x, y])
+        #             # elif x == blocks[-1][1]:
+        #             #     blocks[-1][1] = y
+        #             if len(blocks) > 0 and x == blocks[-1][1]:
+        #                 blocks[-1][1] = y
+        #             else:
+        #                 blocks.append([x, y])
+        #     elif flag == pysam.CREF_SKIP:  # N
+        #         y0 = y0 + count
+        #     elif flag == pysam.CINS:  # I
+        #         continue
+        #     elif flag == pysam.CSOFT_CLIP:  # S
+        #         continue
+        #     elif flag == pysam.CHARD_CLIP:  # H
+        #         continue
+        #     else:
+        #         raise RuntimeError("Unknown cigar flag: %s" % flag)
+        # return blocks
 
     @classmethod
     def get_mapped_length(cls, segment, fill_deletion=True):
@@ -80,7 +84,18 @@ class SegmentTools(object):
         return length
 
     @classmethod
-    def get_events(cls, segment, parsed_cigar=None, parsed_md_tag=None, mapped_length=None):
+    def get_events(cls, segment, parsed_cigar=None, parsed_md_tag=None, mapped_length=None, report_del=True, report_ins=True):
+        """_summary_
+
+        Args:
+            segment (_type_): _description_
+            parsed_cigar (_type_, optional): _description_. Defaults to None.
+            parsed_md_tag (_type_, optional): _description_. Defaults to None.
+            mapped_length (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            list: [pos, ref, alt, qua, dis]
+        """
         if parsed_cigar is None:
             parsed_cigar = cls.parse_cigar(segment)
         if parsed_md_tag is None:
@@ -91,13 +106,13 @@ class SegmentTools(object):
         sequence = segment.query_sequence
         qualities = segment.query_qualities
         events = []
-        x1, y1 = None, None # mapped index
-        x2, y2 = None, None # read index
-        x3, y3 = None, None # reference index
-        pos = None # position
-        ref = None # reference bases
-        alt = None # alternative bases
-        qua = None # event quality
+        # x1, y1 = None, None # mapped index
+        # x2, y2 = None, None # read index
+        # x3, y3 = None, None # reference index
+        # pos = None # position
+        # ref = None # reference bases
+        # alt = None # alternative bases
+        # qua = None # event quality
         for tag in parsed_md_tag:
             if tag[0] == "X": # mismatch
                 x1, y1 = tag[1]
@@ -121,7 +136,7 @@ class SegmentTools(object):
                         found = True
                         break
                 assert found
-            elif tag[0] == "D": # deletion
+            elif tag[0] == "D" and report_del: # deletion
                 x1, y1 = tag[1]
                 ref = tag[2]
                 found = False
@@ -134,21 +149,22 @@ class SegmentTools(object):
                         found = True
                         break
                 assert found
-        for cigar in parsed_cigar:
-            if cigar[0] == "I": # insertion
-                x1, y1 = cigar[1]
-                x2, y2 = cigar[2]
-                x3, y3 = cigar[3]
-                assert x3 == y3
-                pos = x3
-                ref = "-"
-                dis = min(x1, mapped_length - x1)
-                alt = sequence[x2:y2]
-                if len(alt) == 1:
-                    qua = qualities[x2]
-                else:
-                    qua = list(qualities[x2:y2])
-                events.append([pos, ref, alt, qua, dis])
+        if report_ins:
+            for cigar in parsed_cigar:
+                if cigar[0] == "I": # insertion
+                    x1, y1 = cigar[1]
+                    x2, y2 = cigar[2]
+                    x3, y3 = cigar[3]
+                    assert x3 == y3
+                    pos = x3
+                    ref = "-"
+                    dis = min(x1, mapped_length - x1)
+                    alt = sequence[x2:y2]
+                    if len(alt) == 1:
+                        qua = qualities[x2]
+                    else:
+                        qua = list(qualities[x2:y2])
+                    events.append([pos, ref, alt, qua, dis])
         events.sort()
         return events
 
@@ -167,27 +183,27 @@ class SegmentTools(object):
     @classmethod
     def get_block_from_segment(cls, segment, fill_gap=True):
         blocks = []
-        bs = None  # block start
-        be = None  # block end
-        le = segment.reference_start  # last end
+        x = None  # block start
+        y = None  # block end
+        y0 = segment.reference_start  # last end
         for m, n in segment.cigartuples:
             if m == pysam.CMATCH:  # M
-                bs, be = le, le + n
-                le = be
-                if len(blocks) > 0 and bs == blocks[-1][1]:  # concat
-                    blocks[-1][1] = be
+                x, y = y0, y0 + n
+                y0 = y
+                if len(blocks) > 0 and x == blocks[-1][1]:  # concat
+                    blocks[-1][1] = y
                 else:
-                    blocks.append([bs, be])
+                    blocks.append([x, y])
             elif m == pysam.CDEL:  # D
-                bs, be = le, le + n
-                le = be
+                x, y = y0, y0 + n
+                y0 = y
                 if fill_gap:
-                    if len(blocks) > 0 and bs == blocks[-1][1]:
-                        blocks[-1][1] = be
+                    if len(blocks) > 0 and x == blocks[-1][1]:
+                        blocks[-1][1] = y
                     else:
-                        blocks.append([bs, be])
+                        blocks.append([x, y])
             elif m == pysam.CREF_SKIP:  # N
-                le = le + n
+                y0 = y0 + n
             elif m == pysam.CINS:  # I
                 continue
             elif m == pysam.CSOFT_CLIP:  # S
