@@ -6,3 +6,4 @@ from .gff import GffFile, GffRecord, GffTranscript, GffTranscriptBuilder, GffGen
 from .bam import BamFile, Alignment, SegmentTools
 from .fam import FamFile, Fragment, SegmentPairBuilder
 from .vcf import VcfRecord, VcfFile
+from .pair import PairFile, PairRange

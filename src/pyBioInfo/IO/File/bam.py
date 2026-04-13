@@ -140,21 +140,3 @@ class BamFile(BaseFile):
             self._handle.write(obj)
         else:
             raise TypeError("Unsupported record type: %s!" % type(obj))
-
-# class BamFileRandom(BamFile):
-#     def __init__(self, path):
-#         assert path.endswith(".bam")
-#         assert os.path.exists(path)
-#         assert os.path.exists(path + ".bai")
-#         super(BamFileRandom, self).__init__(path, "rb")
-
-#     def fetch(self, chrom=None, start=None, end=None):
-#         if chrom is None:
-#             for c in list(sorted(self._references)):
-#                 for s in self._handle.fetch(contig=c):
-#                     if s.is_unmapped:
-#                         continue
-#                     yield Alignment(s)
-#         else:
-#             for s in self._handle.fetch(contig=chrom, start=start, stop=end):
-#                 yield Alignment(s)

@@ -2,6 +2,7 @@
 from collections import defaultdict
 from functools import cmp_to_key
 import pysam
+from cigar import Cigar
 # from .bundle_builder import Bundle, BundleBuilder
 
 
@@ -306,6 +307,39 @@ class SegmentTools(object):
     def merge_insertion_gap(cls, items):
         items = items.copy()
         return items
+    
+    @classmethod
+    def parse_cigar_form_cigarstring(cls, start, cigarstring):
+        parsed_cigars = []
+        mapped_start, mapped_end = 0, 0
+        read_start, read_end = 0, 0
+        genomic_start, genomic_end = start, start
+        for item in Cigar(cigarstring).items():
+            mapped_start = mapped_end
+            read_start = read_end
+            genomic_start = genomic_end
+            if item[1] == "H" or item[1] == "S":            
+                read_end = read_end + item[0]
+                parsed_cigars.append((item[1], (mapped_start, mapped_end), (read_start, read_end), (genomic_start, genomic_end)))
+            elif item[1] == "M":
+                read_end = read_end + item[0]
+                mapped_end = mapped_end + item[0]
+                genomic_end = genomic_end + item[0]
+                parsed_cigars.append((item[1], (mapped_start, mapped_end), (read_start, read_end), (genomic_start, genomic_end)))
+            elif item[1] == "D":
+                genomic_end = genomic_end + item[0]
+                parsed_cigars.append((item[1], (mapped_start, mapped_end), (read_start, read_end), (genomic_start, genomic_end)))
+            elif item[1] == "I":
+                read_end = read_end + item[0]
+                parsed_cigars.append((item[1], (mapped_start, mapped_end), (read_start, read_end), (genomic_start, genomic_end)))
+            elif item[1] == "N":
+                genomic_end = genomic_end + item[0]
+                parsed_cigars.append((item[1], (mapped_start, mapped_end), (read_start, read_end), (genomic_start, genomic_end)))
+            else:
+                assert False
+        return parsed_cigars
+
+
 
     @classmethod
     def parse_cigar(cls, segment):
