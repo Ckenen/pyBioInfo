@@ -4,8 +4,25 @@ from .base import BaseFile
 
 
 REVERSE_COMLEMENT_MAPPER = {
-    "A": "T", "C": "G", "G": "C", "T": "A", "N": "N",
-    "a": "t", "c": "g", "g": "c", "t": "a", "n": "n"}
+    "A": "T", 
+    "T": "A",
+    "C": "G", 
+    "G": "C",
+    "N": "N",
+    "M": "K",
+    "K": "M",
+    "R": "Y",
+    "Y": "R",
+    "W": "W",
+    "S": "S",
+    "V": "B",
+    "B": "V",    
+    "H": "D",
+    "D": "H",
+}
+
+for k, v in list(REVERSE_COMLEMENT_MAPPER.items()):
+    REVERSE_COMLEMENT_MAPPER[k.lower()] = v.lower()
 
 
 class FastaRecord(object):

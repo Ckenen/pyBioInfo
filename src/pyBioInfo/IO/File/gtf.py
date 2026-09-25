@@ -115,7 +115,7 @@ class GtfFile(BaseFile):
         attributes = OrderedDict()
         key_x, key_y = None, None
         value_x, value_y = None, None
-        value_quotes = False
+        value_has_quotes = False
         i = 0
         while i < len(s):
             c = s[i]
@@ -126,26 +126,26 @@ class GtfFile(BaseFile):
                 if key_y is None:
                     if c == " ":
                         key_y = i
-                        # assert s[i + 1] == "\""
                 else:
                     if value_x is None:
                         if c != " ":
                             if c == "\"":
                                 value_x = i + 1
-                                value_quotes = True
+                                value_has_quotes = True
                             else:
                                 value_x = i
-                                value_quotes = False
+                                value_has_quotes = False
                     else:
-                        if value_quotes:
-                            if c == "\"" and s[i - 1] != "\\":
-                                assert s[i + 1] == ";"
+                        if value_has_quotes:
+                            # if c == "\"" and s[i - 1] != "\\":
+                            #     assert s[i + 1] == ";"
+                            if c == "\"" and s[i - 1] != "\\" and s[i + 1] == ";":
                                 value_y = i
                                 attributes[s[key_x:key_y]] = s[value_x:value_y]
                                 key_x, key_y = None, None
                                 value_x, value_y = None, None
                         else:
-                            if c == ";":   
+                            if c == ";":
                                 value_y = i
                                 attributes[s[key_x:key_y]] = s[value_x:value_y]
                                 key_x, key_y = None, None
@@ -165,6 +165,8 @@ class GtfFile(BaseFile):
             end = int(values[4])
             score = values[5]
             strand = values[6]
+            if strand == "?":
+                strand = "."
             frame = values[7]
             attributes_str = values[8]
             assert strand == "+" or strand == "-" or strand == "."

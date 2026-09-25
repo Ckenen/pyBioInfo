@@ -22,12 +22,20 @@ class Bundle(object):
         return d
 
     def __str__(self):
-        return "\t".join(map(str, [self.chrom,
-                                   self.start_min,
-                                   self.start_max,
-                                   self.end_min,
-                                   self.end_max,
-                                   self.count]))
+        # return "\t".join(map(str, [self.chrom,
+        #                            self.start_min,
+        #                            self.start_max,
+        #                            self.end_min,
+        #                            self.end_max,
+        #                            self.count]))
+        return "chrom: %s, start_min: %d, start_max: %d, end_min: %d, end_max: %d, count: %d" % (
+            self.chrom,
+            self.start_min,
+            self.start_max,
+            self.end_min,
+            self.end_max,
+            self.count
+        )
 
 
 class BundleBuilder(object):
@@ -49,40 +57,101 @@ class BundleBuilder(object):
         end_max = None
         count = None
         data = None
+        
         last = None
+        
         for obj in self._objs:
+            
             if chrom is None:
-                chrom, start_min, start_max, end_min, end_max = obj.chrom, obj.start, obj.start, obj.end, obj.end
+                chrom = obj.chrom 
+                start_min = obj.start
+                start_max = obj.start
+                end_min = obj.end
+                end_max = obj.end
                 count = 1
+                
                 if self._keep:
                     data = [obj]
-            else:
-                if obj.chrom == chrom:
-                    assert obj.start >= last.start
-                    if count >= self._min_capacity and obj.start > start_max + self._min_spacing:
-                        yield Bundle(chrom, start_min, start_max, end_min, end_max, self._mode, count, data)
-                        chrom, start_min, start_max, end_min, end_max = obj.chrom, obj.start, obj.start, obj.end, obj.end
-                        count = 1
-                        if self._keep:
-                            data = [obj]
-                    else:
-                        start_max = obj.start
-                        end_min = min(end_min, obj.end)
-                        end_max = max(end_max, obj.end)
-                        count += 1
-                        if self._keep:
-                            data.append(obj)
-                elif obj.chrom > chrom:
-                    yield Bundle(chrom, start_min, start_max, end_min, end_max, self._mode, count, data)
-                    chrom, start_min, start_max, end_min, end_max = obj.chrom, obj.start, obj.start, obj.end, obj.end
+                    
+            elif obj.chrom == chrom:
+                
+                if obj.start < last.start:
+                    raise RuntimeError("The input regions must be sorted by start (%s: %d-%d < %s: %d)" % (
+                        obj.start, obj.start, obj.end, start_min))
+                    
+                if count >= self._min_capacity and obj.start > start_max + self._min_spacing:
+                    bundle = Bundle(
+                        chrom=chrom,
+                        start_min=start_min,
+                        start_max=start_max,
+                        end_min=end_min,
+                        end_max=end_max,
+                        mode=self._mode,
+                        count=count,
+                        data=data,
+                    )
+                    yield bundle
+                    
+                    chrom = obj.chrom 
+                    start_min = obj.start
+                    start_max = obj.start
+                    end_min = obj.end
+                    end_max = obj.end
                     count = 1
+                    
                     if self._keep:
                         data = [obj]
+                        
                 else:
-                    raise RuntimeError()
+                    start_max = obj.start
+                    end_min = min(end_min, obj.end)
+                    end_max = max(end_max, obj.end)
+                    count += 1
+                    
+                    if self._keep:
+                        data.append(obj)
+                        
+            elif obj.chrom > chrom:
+                bundle = Bundle(
+                    chrom=chrom,
+                    start_min=start_min,
+                    start_max=start_max,
+                    end_min=end_min,
+                    end_max=end_max,
+                    mode=self._mode,
+                    count=count,
+                    data=data,
+                )
+                yield bundle
+                
+                chrom = obj.chrom 
+                start_min = obj.start
+                start_max = obj.start
+                end_min = obj.end
+                end_max = obj.end
+                count = 1
+                
+                if self._keep:
+                    data = [obj]
+                    
+            else:
+                raise RuntimeError("The input regions must be sorted by chrom and start (%s: %d-%d < %s)" % (
+                    obj.chrom, obj.start, obj.end, chrom))
+                
             last = obj
+            
         if chrom:
-            yield Bundle(chrom, start_min, start_max, end_min, end_max, self._mode, count, data)
+            bundle = Bundle(
+                chrom=chrom,
+                start_min=start_min,
+                start_max=start_max,
+                end_min=end_min,
+                end_max=end_max,
+                mode=self._mode,
+                count=count,
+                data=data,
+            )
+            yield bundle
 
     def _build_by_start_and_end_mode(self):
         chrom = None
@@ -92,40 +161,102 @@ class BundleBuilder(object):
         end_max = None
         count = None
         data = None
+        
         last = None
+        
         for obj in self._objs:
             if chrom is None:
-                chrom, start_min, start_max, end_min, end_max = obj.chrom, obj.start, obj.start, obj.end, obj.end
+                # The first region
+                
+                chrom = obj.chrom
+                start_min = obj.start
+                start_max = obj.start
+                end_min = obj.end
+                end_max = obj.end
                 count = 1
                 if self._keep:
                     data = [obj]
-            else:
-                if obj.chrom == chrom:
-                    assert obj.start >= last.start
-                    if count >= self._min_capacity and obj.start >= end_max + self._min_spacing:
-                        yield Bundle(chrom, start_min, start_max, end_min, end_max, self._mode, count, data)
-                        chrom, start_min, start_max, end_min, end_max = obj.chrom, obj.start, obj.start, obj.end, obj.end
-                        count = 1
-                        if self._keep:
-                            data = [obj]
-                    else:
-                        start_max = obj.start
-                        end_min = min(end_min, obj.end)
-                        end_max = max(end_max, obj.end)
-                        count += 1
-                        if self._keep:
-                            data.append(obj)
-                elif obj.chrom > chrom:
-                    yield Bundle(chrom, start_min, start_max, end_min, end_max, self._mode, count, data)
-                    chrom, start_min, start_max, end_min, end_max = obj.chrom, obj.start, obj.start, obj.end, obj.end
+             
+            elif obj.chrom == chrom:
+                # Equal chromosome
+                
+                if obj.start < last.start:
+                    raise RuntimeError("The input regions must be sorted by start (%s: %d-%d < %s: %d)" % (
+                        obj.start, obj.start, obj.end, start_min))
+                    
+                if count >= self._min_capacity and obj.start >= end_max + self._min_spacing:
+                    bundle = Bundle(
+                        chrom=chrom, 
+                        start_min=start_min, 
+                        start_max=start_max, 
+                        end_min=end_min, 
+                        end_max=end_max, 
+                        mode=self._mode, 
+                        count=count, 
+                        data =data,
+                    )
+                    yield bundle
+                    
+                    chrom = obj.chrom
+                    start_min = obj.start
+                    start_max = obj.start
+                    end_min = obj.end
+                    end_max = obj.end
                     count = 1
+                    
                     if self._keep:
                         data = [obj]
+                        
                 else:
-                    raise RuntimeError("Error: %s < %s" % (obj.chrom, chrom))
+                    start_max = obj.start
+                    end_min = min(end_min, obj.end)
+                    end_max = max(end_max, obj.end)
+                    count += 1
+                    
+                    if self._keep:
+                        data.append(obj)
+                        
+            elif obj.chrom > chrom:
+                bundle = Bundle(
+                    chrom=chrom, 
+                    start_min=start_min, 
+                    start_max=start_max, 
+                    end_min=end_min, 
+                    end_max=end_max, 
+                    mode=self._mode, 
+                    count=count, 
+                    data =data,
+                )
+                yield bundle
+                
+                chrom = obj.chrom
+                start_min = obj.start
+                start_max = obj.start
+                end_min = obj.end
+                end_max = obj.end
+                count = 1
+                
+                if self._keep:
+                    data = [obj]
+                    
+            else:
+                raise RuntimeError("The input regions must be sorted by chrom and start (%s: %d-%d < %s)" % (
+                    obj.chrom, obj.start, obj.end, chrom))
+                
             last = obj
+                
         if chrom:
-            yield Bundle(chrom, start_min, start_max, end_min, end_max, self._mode, count, data)
+            bundle = Bundle(
+                chrom=chrom,
+                start_min=start_min,
+                start_max=start_max,
+                end_min=end_min,
+                end_max=end_max,
+                mode=self._mode,
+                count=count,
+                data=data,
+            )
+            yield bundle
 
     def __iter__(self):
         if self._mode == self.MODE_START_ONLY:
@@ -133,6 +264,6 @@ class BundleBuilder(object):
         elif self._mode == self.MODE_START_AND_END:
             iter = self._build_by_start_and_end_mode()
         else:
-            raise RuntimeError()
+            raise RuntimeError("Unknown mode (%s)" % self._mode)
         for bundle in iter:
             yield bundle

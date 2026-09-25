@@ -11,7 +11,7 @@ class Alignment(GRange):
         chrom = segment.reference_name
         name = segment.query_name
         strand = "-" if segment.is_reverse else "+"
-        blocks = SegmentTools.get_block_from_segment(segment)
+        blocks = SegmentTools.get_blocks(segment)
         super(Alignment, self).__init__(chrom=chrom,
                                         name=name,
                                         blocks=blocks,
@@ -123,6 +123,8 @@ class BamFile(BaseFile):
                         yield Alignment(s)
             else:
                 for s in self._handle.fetch(contig=chrom, start=start, stop=end):
+                    if s.is_unmapped:
+                        continue
                     yield Alignment(s)
         else:
             if chrom is None:

@@ -2,13 +2,13 @@
 from collections import defaultdict
 from functools import cmp_to_key
 import pysam
-from cigar import Cigar
 # from .bundle_builder import Bundle, BundleBuilder
 
 
 class SegmentTools(object):
-    @classmethod
-    def cmp_for_segments(cls, s1, s2):
+    @staticmethod
+    def cmp(s1, s2):
+        assert not s1.is_unmapped and not s2.is_unmapped
         chrom1, chrom2 = s1.reference_name, s2.reference_name
         if chrom1 < chrom2:
             return -1
@@ -28,53 +28,53 @@ class SegmentTools(object):
                         return 0
         return 1
     
-    @classmethod
-    def sort_segments(cls, segments):
-        return sorted(segments, key=cmp_to_key(cls.cmp_for_segments))
+    @staticmethod
+    def sort(segments, by_coordinates=True, by_name=False):
+        if by_coordinates:
+            if by_name:
+                assert False
+            else:
+                sorted(segments, key=cmp_to_key(SegmentTools.cmp))
+        else:
+            if by_name:
+                return sorted(segments, key=lambda x: x.query_name)
+            else:
+                assert False
     
-    @classmethod
-    def get_blocks(cls, segment, fill_deletion=True):
-        return cls.get_block_from_segment(segment, fill_deletion)    
-        # blocks = []
-        # x = None  # block start
-        # y = None  # block end
-        # y0 = segment.reference_start  # last end
-        # cigartuples = segment.cigartuples
-        # for i in range(len(cigartuples)):
-        #     flag, count = cigartuples[i]
-        #     if flag == pysam.CMATCH:  # M
-        #         x, y = y0, y0 + count
-        #         y0 = y
-        #         if len(blocks) > 0 and x == blocks[-1][1]:
-        #             blocks[-1][1] = y
-        #         else:
-        #             blocks.append([x, y])
-        #     elif flag == pysam.CDEL:  # D
-        #         x, y = y0, y0 + count
-        #         y0 = y
-        #         if fill_deletion:
-        #             # if len(blocks) == 0:
-        #             #     blocks.append([x, y])
-        #             # elif x == blocks[-1][1]:
-        #             #     blocks[-1][1] = y
-        #             if len(blocks) > 0 and x == blocks[-1][1]:
-        #                 blocks[-1][1] = y
-        #             else:
-        #                 blocks.append([x, y])
-        #     elif flag == pysam.CREF_SKIP:  # N
-        #         y0 = y0 + count
-        #     elif flag == pysam.CINS:  # I
-        #         continue
-        #     elif flag == pysam.CSOFT_CLIP:  # S
-        #         continue
-        #     elif flag == pysam.CHARD_CLIP:  # H
-        #         continue
-        #     else:
-        #         raise RuntimeError("Unknown cigar flag: %s" % flag)
-        # return blocks
+    @staticmethod
+    def get_blocks(segment, fill_deletion=True):
+        blocks, x, y, y0 = [], None, None, segment.reference_start
+        for m, n in segment.cigartuples:
+            if m == pysam.CMATCH:  # M
+                x, y = y0, y0 + n
+                y0 = y
+                if len(blocks) > 0 and x == blocks[-1][1]:  # concat
+                    blocks[-1][1] = y
+                else:
+                    blocks.append([x, y])
+            elif m == pysam.CDEL:  # D
+                x, y = y0, y0 + n
+                y0 = y
+                if fill_deletion:
+                    if len(blocks) > 0 and x == blocks[-1][1]:
+                        blocks[-1][1] = y
+                    else:
+                        blocks.append([x, y])
+            elif m == pysam.CREF_SKIP:  # N
+                y0 = y0 + n
+            elif m == pysam.CINS:  # I
+                continue
+            elif m == pysam.CSOFT_CLIP:  # S
+                continue
+            elif m == pysam.CHARD_CLIP:  # H
+                continue
+            else:
+                raise RuntimeError("Unknown cigar type: %s" % m)
+        return blocks
 
-    @classmethod
-    def get_mapped_length(cls, segment, fill_deletion=True):
+
+    @staticmethod
+    def get_mapped_length(segment, fill_deletion=True):
         length = 0
         for flag, count in segment.cigartuples:
             if flag == pysam.CMATCH:  # M
@@ -180,40 +180,6 @@ class SegmentTools(object):
         for base in segment.get_reference_sequence():
             counter[base.upper()] += 1
         return counter
-    
-    @classmethod
-    def get_block_from_segment(cls, segment, fill_gap=True):
-        blocks = []
-        x = None  # block start
-        y = None  # block end
-        y0 = segment.reference_start  # last end
-        for m, n in segment.cigartuples:
-            if m == pysam.CMATCH:  # M
-                x, y = y0, y0 + n
-                y0 = y
-                if len(blocks) > 0 and x == blocks[-1][1]:  # concat
-                    blocks[-1][1] = y
-                else:
-                    blocks.append([x, y])
-            elif m == pysam.CDEL:  # D
-                x, y = y0, y0 + n
-                y0 = y
-                if fill_gap:
-                    if len(blocks) > 0 and x == blocks[-1][1]:
-                        blocks[-1][1] = y
-                    else:
-                        blocks.append([x, y])
-            elif m == pysam.CREF_SKIP:  # N
-                y0 = y0 + n
-            elif m == pysam.CINS:  # I
-                continue
-            elif m == pysam.CSOFT_CLIP:  # S
-                continue
-            elif m == pysam.CHARD_CLIP:  # H
-                continue
-            else:
-                raise RuntimeError("Unknown cigar type: %s" % m)
-        return blocks
 
     @classmethod
     def get_aligned_sequence(cls, segment):
@@ -247,69 +213,70 @@ class SegmentTools(object):
         aligned_query_sequence = "".join(aligned_query_sequence)
         return aligned_query_sequence, aligned_query_qualities
 
-    @classmethod
-    def merge_deletion_gap(cls, items):
-        items = items.copy()
-        while True:
-            found = False
-            i = 0
-            for item in items:
-                if item[0] == pysam.CDEL:
-                    found = True
-                    break
-                i += 1
-            if found:
-                if i == 0:
-                    if i == len(items) - 1:
-                        raise ValueError("Only one DEL")
-                    else:
-                        item = items[i]
-                        items.pop(i)
-                        if items[i][0] == pysam.CMATCH and items[i][1] == item[2]:
-                            items[i][1] = item[1]
-                else:
-                    if i == len(items) - 1:
-                        item = items[i]
-                        items.pop(i)
-                        if items[-1][0] == pysam.CMATCH and items[-1][2] == item[1]:
-                            items[-1][2] = item[2]
-                    else:
-                        item = items[i]
-                        items.pop(i)
-                        if items[i - 1][0] == pysam.CMATCH:
-                            if items[i][0] == pysam.CMATCH:
-                                if items[i - 1][2] == item[1]:
-                                    if items[i][1] == item[2]:
-                                        item1 = items[i]
-                                        items.pop(i)
-                                        items[i - 1][2] = item1[2]
-                                    else:
-                                        items[i - 1][2] = item[2]
-                                else:
-                                    if items[i][1] == item[2]:
-                                        items[i][1] = item[1]
-                                    else:
-                                        continue
-                            else:
-                                if items[i - 1][2] == item[1]:
-                                    items[i - 1][2] = item[2]
-                        else:
-                            if items[i][0] == pysam.CMATCH:
-                                if items[i][1] == item[2]:
-                                    items[i][2] = item[1]
-                            else:
-                                continue
-            else:
-                break
-        return items
+    # @classmethod
+    # def merge_deletion_gap(cls, items):
+    #     items = items.copy()
+    #     while True:
+    #         found = False
+    #         i = 0
+    #         for item in items:
+    #             if item[0] == pysam.CDEL:
+    #                 found = True
+    #                 break
+    #             i += 1
+    #         if found:
+    #             if i == 0:
+    #                 if i == len(items) - 1:
+    #                     raise ValueError("Only one DEL")
+    #                 else:
+    #                     item = items[i]
+    #                     items.pop(i)
+    #                     if items[i][0] == pysam.CMATCH and items[i][1] == item[2]:
+    #                         items[i][1] = item[1]
+    #             else:
+    #                 if i == len(items) - 1:
+    #                     item = items[i]
+    #                     items.pop(i)
+    #                     if items[-1][0] == pysam.CMATCH and items[-1][2] == item[1]:
+    #                         items[-1][2] = item[2]
+    #                 else:
+    #                     item = items[i]
+    #                     items.pop(i)
+    #                     if items[i - 1][0] == pysam.CMATCH:
+    #                         if items[i][0] == pysam.CMATCH:
+    #                             if items[i - 1][2] == item[1]:
+    #                                 if items[i][1] == item[2]:
+    #                                     item1 = items[i]
+    #                                     items.pop(i)
+    #                                     items[i - 1][2] = item1[2]
+    #                                 else:
+    #                                     items[i - 1][2] = item[2]
+    #                             else:
+    #                                 if items[i][1] == item[2]:
+    #                                     items[i][1] = item[1]
+    #                                 else:
+    #                                     continue
+    #                         else:
+    #                             if items[i - 1][2] == item[1]:
+    #                                 items[i - 1][2] = item[2]
+    #                     else:
+    #                         if items[i][0] == pysam.CMATCH:
+    #                             if items[i][1] == item[2]:
+    #                                 items[i][2] = item[1]
+    #                         else:
+    #                             continue
+    #         else:
+    #             break
+    #     return items
 
-    @classmethod
-    def merge_insertion_gap(cls, items):
-        items = items.copy()
-        return items
+    # @classmethod
+    # def merge_insertion_gap(cls, items):
+    #     items = items.copy()
+    #     return items
     
-    @classmethod
-    def parse_cigar_form_cigarstring(cls, start, cigarstring):
+    @staticmethod
+    def parse_cigar_from_cigarstring(start, cigarstring):
+        from cigar import Cigar
         parsed_cigars = []
         mapped_start, mapped_end = 0, 0
         read_start, read_end = 0, 0
@@ -339,10 +306,8 @@ class SegmentTools(object):
                 assert False
         return parsed_cigars
 
-
-
-    @classmethod
-    def parse_cigar(cls, segment):
+    @staticmethod
+    def parse_cigar_from_segment(segment):
         """
         return: [
             (
@@ -404,6 +369,19 @@ class SegmentTools(object):
             else:
                 raise RuntimeError()
         return results
+
+    @staticmethod
+    def parse_cigar(segment=None, start=None, caigarstring=None):
+        if segment is None:
+            if caigarstring is None:
+                raise RuntimeError()
+            else:
+                return SegmentTools.parse_cigar_from_cigarstring(start, caigarstring)
+        else:
+            if caigarstring is None:
+                return SegmentTools.parse_cigar_from_segment(segment)
+            else:
+                raise RuntimeError()
 
     @classmethod
     def parse_md_tag(cls, segment):
@@ -553,23 +531,33 @@ class SegmentTools(object):
         results = list(sorted(results, key=lambda item: item[1]))
         return results
 
-    @classmethod
-    def get_mapped_length(cls, segment):
+    @staticmethod
+    def get_mapped_length(segment):
         length = 0
         for cigar in segment.cigartuples:
             if cigar[0] == pysam.CMATCH or cigar[0] == pysam.CDEL:
                 length += cigar[1]
         return length
     
-    @classmethod
-    def get_clipped(cls, segment):
-        clip1, clip2 = 0, 0
+    @staticmethod
+    def get_clipped(segment, soft_clip=True, hard_clip=True, stranded=False):
+        c1, c2 = 0, 0
         cigars = segment.cigartuples
-        if cigars[0][0] == pysam.CHARD_CLIP or cigars[0][0] == pysam.CSOFT_CLIP:
-            clip1 = cigars[0][1]
-        if cigars[-1][0] == pysam.CHARD_CLIP or cigars[-1][0] == pysam.CSOFT_CLIP:
-            clip2 = cigars[1][1]
-        return clip1, clip2
+        if cigars[0][0] == pysam.CHARD_CLIP:
+            if soft_clip:
+                c1 = cigars[0][1]
+        elif cigars[0][0] == pysam.CSOFT_CLIP:
+            if hard_clip:
+                c1 = cigars[0][1]
+        if cigars[-1][0] == pysam.CHARD_CLIP:
+            if soft_clip:
+                c2 = cigars[1][1]
+        elif cigars[-1][0] == pysam.CSOFT_CLIP:
+            if hard_clip:
+                c2 = cigars[1][1]
+        if stranded and segment.is_reverse:
+            c1, c2 = c2, c1
+        return c1, c2
     
     @classmethod
     def get_query_base(cls, segment, position, parsed_cigar=None):
@@ -612,6 +600,94 @@ class SegmentTools(object):
         return base
     
     
+    @staticmethod
+    def load_same_name_segments(path_or_loader):
+        segments = []
+        f = None
+        if isinstance(path_or_loader, str):
+            path = path_or_loader
+            f = pysam.AlignmentFile(path)
+            loader = f.fetch(until_eof=True)
+        else:
+            loader = path_or_loader
+        for s in loader:
+            if len(segments) == 0:
+                segments = [s]
+            elif s.query_name == segments[0].query_name:
+                segments.append(s)
+            else:
+                assert s.query_name > segments[0].query_name
+                yield segments
+                segments = [s]
+        if len(segments) > 0:
+            yield segments
+        if f:
+            f.close()
+
+    @classmethod
+    def is_mate(cls, segment1, segment2):
+        # read name
+        if segment1.query_name != segment2.query_name:
+            return False
+        
+        # chrom
+        if segment1.next_reference_name != segment2.reference_name:
+            return False
+        if segment1.reference_name != segment2.next_reference_name:
+            return False
+        
+        # start
+        if segment1.next_reference_start != segment2.reference_start:
+            return False
+        if segment1.reference_start != segment2.next_reference_start:
+            return False
+        
+        # read 1 and read 2
+        if segment1.is_read1:
+            if segment2.is_read1:
+                return False
+            elif segment2.is_read2:
+                pass
+            else:
+                raise RuntimeError()
+        elif segment1.is_read2:
+            if segment2.is_read1:
+                pass
+            elif segment2.is_read2:
+                return False
+            else:
+                raise RuntimeError()
+        else:
+            raise RuntimeError()
+        
+        # primary and secondary
+        if segment1.is_secondary:
+            if segment2.is_secondary:
+                pass
+            else:
+                return False
+        else:
+            if segment2.is_secondary:
+                return False
+            else:
+                pass
+        
+        # mate cigar
+        if segment1.has_tag("MC"):
+            if segment2.has_tag("MC"):
+                if segment1.get_tag("MC") != segment2.cigarstring:
+                    return False
+                if segment1.cigarstring != segment2.get_tag("MC"):
+                    return False
+            else:
+                raise RuntimeError()
+        else:
+            if segment2.has_tag("MC"):
+                raise RuntimeError()
+            else:
+                pass
+            
+        return True
     
     
 class SegmentPair(object):
@@ -620,9 +696,11 @@ class SegmentPair(object):
     """
 
     def __init__(self, mate1, mate2):
-        # assert mate1.reference_name == mate2.reference_name
-        # assert mate1.is_read1
-        # assert mate2.is_read2
+        assert isinstance(mate1, pysam.AlignedSegment)
+        assert isinstance(mate2, pysam.AlignedSegment)
+        assert mate1.reference_name == mate2.reference_name
+        assert mate1.query_name == mate2.query_name
+        assert mate1.is_read1 and mate2.is_read2
         self.chrom = mate1.reference_name
         self.start = min(mate1.reference_start, mate2.reference_start)
         self.end = max(mate1.reference_end, mate2.reference_end)
@@ -646,11 +724,52 @@ class SegmentPairBuilder(object):
     Create SegmentPaired objects.
     """
 
-    def __init__(self, segments):
+    def __init__(self, segments, is_sorted_by_coords=False, is_sorted_by_name=False):
+        self.is_sorted_by_coords = is_sorted_by_coords
+        self.is_sorted_by_name = is_sorted_by_name
         self.segments = segments
 
+ 
     @classmethod
     def _build_pair(cls, segments):
+        data = defaultdict(list)
+        for s in segments:
+            data[s.query_name].append(s)
+        
+        pairs = []
+        
+        for query_name, segments2 in data.items():
+            
+            reads1 = []
+            reads2 = []
+
+            for s in segments2:
+                if s.is_read1:
+                    reads1.append(s)
+                elif s.is_read2:
+                    reads2.append(s)
+                else:
+                    raise RuntimeError()
+            
+            for s1 in reads1:
+                s2 = None
+                for i2 in range(len(reads2)):
+                    if SegmentTools.is_mate(s1, reads2[i2]):
+                        s2 = reads2.pop(i2)
+                        break
+                if s2 is None:
+                    print(s1)
+                    raise RuntimeError()
+                pairs.append(SegmentPair(s1, s2))
+            assert len(reads2) == 0
+            
+        for pair in sorted(pairs):
+            yield pair   
+            
+            
+    @classmethod
+    def _build_pair_v1(cls, segments):
+        
         # [s1, s2, s3, s4, ...]
         array1 = []
         # [[s1, s2, s3, s4, ...], [s5, s6, s7, s8, ...]]
@@ -699,45 +818,96 @@ class SegmentPairBuilder(object):
         array3 = list(sorted(array3))
         for item in array3:
             yield item
-
-    def __iter__(self):
-        chrom, require_start = None, None
-        count = None
-        array = None
+            
+    def _build_pairs_from_coords_sorted_segments(self):
+        assert self.is_sorted_by_coords
+        assert not self.is_sorted_by_name
+        
+        chrom_last = None
+        require_start = -1
+        array = []
         last = None
+        
         for segment in self.segments:
             assert segment.is_proper_pair
-            chrom1 = segment.reference_name
-            start1 = segment.reference_start
-            start2 = segment.next_reference_start
-            if chrom is None:
-                chrom = chrom1
-                require_start = max(start1, start2)
-                array = [segment]
-                count = 1
-            else:
-                if chrom1 == chrom:
-                    assert start1 >= last.reference_start
-                    if count >= 32 and start1 > require_start:
-                        for pair in self._build_pair(array):
-                            yield pair
-                        require_start = max(start1, start2)
-                        array = [segment]
-                        count = 1
-                    else:
-                        require_start = max(require_start, start1, start2)
-                        array.append(segment)
-                        count += 1
-                elif chrom1 > chrom:
+            
+            chrom_current = segment.reference_name
+            start_current = segment.reference_start
+            start_mate = segment.next_reference_start
+            start_max = max(start_current, start_mate)
+            
+            if chrom_last is not None:
+                assert chrom_current >= chrom_last
+                if chrom_current == chrom_last:
+                    assert start_current >= last.reference_start
+
+                if chrom_current != chrom_last or start_current > require_start:
                     for pair in self._build_pair(array):
                         yield pair
-                    chrom = chrom1
-                    require_start = max(start1, start2)
-                    array = [segment]
-                    count = 1
-                else:
-                    raise RuntimeError()
+                    array = []
+                    require_start = -1
+                    last = None
+
+            chrom_last = chrom_current
+            require_start = max(require_start, start_max)
+            array.append(segment)
             last = segment
-        if chrom:
+            
+        if chrom_last is not None:
             for pair in self._build_pair(array):
                 yield pair
+        
+    def _build_pairs_from_name_sorted_segments(self):
+        assert self.is_sorted_by_name
+        assert not self.is_sorted_by_coords
+    
+    def _build_pairs_from_unsorted_segments(self):
+        assert not self.is_sorted_by_name
+        assert not self.is_sorted_by_coords
+        data = defaultdict(list)
+        for segment in self.segments:
+            data[segment.query_name].append(segment)
+        for _, items in sorted(data.items()):
+            for pair in self._build_pairs_from_same_name_segments(items):
+                yield pair
+        
+    def _build_pairs_from_same_name_segments(self, segments):
+        pairs = []
+        reads1 = []
+        reads2 = []
+        for s in segments:
+            if s.is_read1:
+                reads1.append(s)
+            elif s.is_read2:
+                reads2.append(s)
+            else:
+                raise RuntimeError()
+        
+        for s1 in reads1:
+            s2 = None
+            for i2 in range(len(reads2)):
+                if SegmentTools.is_mate(s1, reads2[i2]):
+                    s2 = reads2.pop(i2)
+                    break
+            if s2 is None:
+                print(s1)
+                raise RuntimeError()
+            pairs.append(SegmentPair(s1, s2))
+        assert len(reads2) == 0
+
+    def __iter__(self):
+        iterator = None
+        if self.is_sorted_by_coords:
+            if self.is_sorted_by_name:
+                raise RuntimeError()
+            else:
+                iterator = self._build_pairs_from_coords_sorted_segments()
+        else:
+            if self.is_sorted_by_name:
+                iterator = self._build_pairs_from_name_sorted_segments()
+            else:
+                iterator = self._build_pairs_from_unsorted_segments()
+        for pair in iterator:
+            yield pair
+                
+        

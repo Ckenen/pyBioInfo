@@ -6,11 +6,7 @@ import gzip
 
 class PairRange(GRange):
     def __init__(self, name, chrom1, start1, end1, strand1, chrom2, start2, end2, strand2, score1=None, score2=None):
-        super(PairRange, self).__init__(chrom=chrom1,
-                                        name=name,
-                                        start=start1,
-                                        end=end1,
-                                        strand=strand1)
+        super(PairRange, self).__init__(chrom=chrom1, start=start1, end=end1, strand=strand1, name=name)
         self.chrom1 = chrom1
         self.start1 = start1
         self.end1 = end1
@@ -21,6 +17,7 @@ class PairRange(GRange):
         self.strand2 = strand2
         self.score1 = score1
         self.score2 = score2
+        self.additions = None
         
     def __str__(self):
         return "%s:%d-%d(%s)|%s:%d-%d(%s)" % (
@@ -29,17 +26,21 @@ class PairRange(GRange):
         
     def format(self, fmt="pair"):
         if fmt == "pair":
-            return "\t".join(map(str, [
+            items = [
                 self.name, 
-                self.chrom1, self.start1 + 1, 
-                self.chrom2, self.start2 + 1,
+                self.chrom1, 
+                self.start1 + 1, 
+                self.chrom2, 
+                self.start2 + 1,
                 self.strand1, 
                 self.strand2, 
                 "." if self.score1 is None else self.score1, 
                 "." if self.score2 is None else self.score2,
                 self.end1 - self.start1,
-                self.end2 - self.start2
-            ]))
+                self.end2 - self.start2]
+            if self.additions is not None:
+                items = items + self.additions
+            return "\t".join(map(str, items))
         raise ValueError()
         
     
@@ -82,7 +83,7 @@ class PairFile(BaseFile):
             
     def fetch(self, chrom1=None, start1=None, end1=None, chrom2=None, start2=None, end2=None):
         if self._random:
-            q = None
+            query = None
             if chrom1 is None:
                 if chrom2 is None:
                     for line in self.handle:
@@ -92,14 +93,14 @@ class PairFile(BaseFile):
                         start2 = 0
                     if end2 is None:
                         end2 = 999999999
-                    q = "|%s:%d-%d" % (chrom2, start2, end2)
+                    query = "|%s:%d-%d" % (chrom2, start2, end2)
             else:
                 if chrom2 is None:
                     if start1 is None:
                         start1 = 0
                     if end1 is None:
                         end1 = 999999
-                    q = "%s:%d-%d|%" % (chrom1, start1, end1)
+                    query = "%s:%d-%d|%" % (chrom1, start1, end1)
                 else:
                     if start1 is None:
                         start1 = 0
@@ -109,8 +110,8 @@ class PairFile(BaseFile):
                         start2 = 0
                     if end2 is None:
                         end2 = 999999999
-                    q = "%s:%d-%d|%s:%d-%d" % (chrom1, start1, end1, chrom2, start2, end2)
-            if q is not None:
+                    query = "%s:%d-%d|%s:%d-%d" % (chrom1, start1, end1, chrom2, start2, end2)
+            if query is not None:
                 raise NotImplementedError()
         else:
             if chrom1 is None and start1 is None and end1 is None \
@@ -134,11 +135,12 @@ class PairFile(BaseFile):
         strand1, strand2 = row[5], row[6]
         score1 = None if row[7] == "." else int(row[7])
         score2 = None if row[8] == "." else int(row[8])
-        length1 = int(row[9])
-        length2 = int(row[10])
+        length1, length2 = int(row[9]), int(row[10])
         end1, end2 = start1 + length1, start2 + length2
         pr = PairRange(name=name, 
                        chrom1=chrom1, start1=start1, end1=end1, strand1=strand1, score1=score1, 
                        chrom2=chrom2, start2=start2, end2=end2, strand2=strand2, score2=score2)
+        if len(row) > 11:
+            pr.additions = row[11:]
         return pr
         

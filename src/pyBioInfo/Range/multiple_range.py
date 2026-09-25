@@ -1,5 +1,4 @@
 # Class: MRange (multiple genomic range()
-from .interval_range import IRange
 from .genomic_range import GRange
 from pyBioInfo.Utils import BlockTools
 

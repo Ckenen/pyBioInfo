@@ -5,14 +5,15 @@ from .bam import BamFile, Alignment
 
 class Fragment(MRange):
     def __init__(self, segment1, segment2):
-        # assert segment1.query_name == segment2.query_name
+        assert segment1.query_name == segment2.query_name
+        assert segment1.reference_name == segment2.reference_name
         mate1 = Alignment(segment1)
         mate2 = Alignment(segment2)
-        super(Fragment, self).__init__(chrom=mate1.chrom,
-                                       name=mate1.name,
-                                       strand=mate1.strand,
-                                       blocks_array=[mate1.blocks,
-                                                     mate2.blocks])
+        chrom = mate1.chrom
+        name = mate1.name
+        strand = mate1.strand
+        blocks_array=[mate1.blocks, mate2.blocks]
+        super(Fragment, self).__init__(chrom=chrom, name=name, strand=strand, blocks_array=blocks_array)
         self._mate1 = mate1
         self._mate2 = mate2
 
@@ -70,29 +71,3 @@ class FamFile(BamFile):
         else:
             super(FamFile, self).write(obj)
 
-
-# class FamFileRandom(FamFile):
-#     def __init__(self, path):
-#         assert path.endswith(".bam")
-#         assert os.path.exists(path)
-#         assert os.path.exists(path + ".bai")
-#         super(FamFileRandom, self).__init__(path, "rb")
-
-#     @property
-#     def handle(self):
-#         return self._handle
-    
-#     @property
-#     def references(self):
-#         return self._references
-
-#     def fetch(self, chrom=None, start=None, end=None):
-#         if chrom is None:
-#             for c in sorted(self._references.keys()):
-#                 segments = self._handle.fetch(contig=c)
-#                 for pair in SegmentPairBuilder(segments):
-#                     yield Fragment(pair.mate1, pair.mate2)
-#         else:
-#             segments = self._handle.fetch(contig=chrom, start=start, stop=end)
-#             for pair in SegmentPairBuilder(segments):
-#                 yield Fragment(pair.mate1, pair.mate2)

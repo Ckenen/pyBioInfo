@@ -1,5 +1,6 @@
 # Class: IRange (interval range)
 
+
 class IRange(object):
     # Set slot to reduce memory usage.
     __slots__ = ["_start", "_end"] 

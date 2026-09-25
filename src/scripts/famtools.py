@@ -2,24 +2,33 @@
 import sys
 import os
 import optparse
+import argparse
 import pysam
 from pyBioInfo.IO.File import BedFile, FamFile, VcfFile
 from pyBioInfo.Utils import ShiftLoader, BundleBuilder
 
 class FamTools(object):
-    @classmethod
-    def build(cls, args):
-        usage = "%prog input.bam output.fam"
-        parser = optparse.OptionParser(usage=usage)
-        options, args = parser.parse_args(args)
-        infile, outfile = args
+    @staticmethod
+    def build(args):
+        infile = args.__dict__["in.bam"]
+        outfile = args.__dict__["out.fam"]
         
-        with FamFile(infile) as f, FamFile(outfile, "wb", f) as fw:
-            for obj in f:
-                fw.write(obj)
+        
+        
+        # usage = "%prog input.bam output.fam"
+        # parser = optparse.OptionParser(usage=usage)
+        # options, args = parser.parse_args(args)
+        # infile, outfile = args
+        
+        # with FamFile(infile) as f, FamFile(outfile, "wb", f) as fw:
+        #     for obj in f:
+        #         fw.write(obj)
 
-    @classmethod
-    def split(cls, args):
+    @staticmethod
+    def split(args):
+        infam = args.__dict__["in.fam"]
+        outdir = args.outdir
+        
         usage = "%prog [options] input.fam outdir"
         parser = optparse.OptionParser(usage=usage)
         parser.add_option("-a", "--all", dest="all", action="store_true", default=False, help="output all references.")
@@ -51,8 +60,8 @@ class FamTools(object):
             if fw is not None:
                 fw.close()
             
-    @classmethod
-    def merge(cls, args):
+    @staticmethod
+    def merge(args):
         usage = "%prog input1.fam input2.fam ... output.fam"
         parser = optparse.OptionParser(usage=usage)
         options, args = parser.parse_args(args)
@@ -67,10 +76,10 @@ class FamTools(object):
                 for segment in f:
                     fw.write(segment)
         fw.close()
-                
         
-    @classmethod
-    def maskevent(cls, args):
+        
+    @staticmethod
+    def maskevent(args):
         usage = "%prog input.fam snps.bed/vcf output.fam"
         parser = optparse.OptionParser(usage=usage)
         options, args = parser.parse_args(args)
@@ -121,40 +130,36 @@ class FamTools(object):
             #             ce = ";".join(events)
             #             segment.set_tag("CE", ce)
             #         fw.write(frag)
-            
+        
+        
 
 def main():
-    usage = """Usage:
-    famtools.py command [args]
+    parser = argparse.ArgumentParser(description="A toolkit to process FAM file")
 
-Commands:
-    -h, --help  show this help.
-    build       build fragmented file (FAM format).
-    split       split fam by reference.
-    merge       merge fam.
-    maskevent   mask SNPs mismatch events. (CE tag)
-"""
+    subparsers = parser.add_subparsers(title="Available subcommands",dest="command")
 
-    if len(sys.argv) < 2:
-        sys.stdout.write(usage + "\n")
-        exit(1)
+    build_parser = subparsers.add_parser("build", help="Build FAM file", description="Build FAM file.")
+    build_parser.add_argument("in.bam", help="Input BAM file")
+    build_parser.add_argument("out.fam", help="Output FAM file")
+    build_parser.add_argument("-@", "--threads", type=int, default=4, help="Number of threads (default: 4)")
+    build_parser.set_defaults(func=FamTools.build)
 
-    command = sys.argv[1]
-    args = sys.argv[2:] 
-    if command == "-h":
-        sys.stdout.write(usage + "\n")
-        exit(1)
-    elif command == "build":
-        FamTools.build(args)
-    elif command == "split":
-        FamTools.split(args)
-    elif command == "merge":
-        FamTools.merge(args)
-    elif command == "maskevent":
-        FamTools.maskevent(args)
-    else:
-        sys.stderr.write("Unknown command %s\n" % command)
-        exit(1)
+    split_parser = subparsers.add_parser("split", help="Split FAM file by seqname", description="Split FAM file by seqname.")
+    split_parser.add_argument("in.fam", help="Input FAM file")
+    split_parser.add_argument("outdir", help="Output directory")
+    split_parser.set_defaults(func=FamTools.split)
+
+    merge_parser = subparsers.add_parser("merge", help="Merge splitted FAM files", description="Merge splitted FAM files.")
+    merge_parser.add_argument("input", help="Input SAM/BAM file")
+    merge_parser.set_defaults(func=FamTools.merge)
+
+    args = parser.parse_args()
+
+    if args.command is None:
+        parser.print_help()
+        return
+
+    args.func(args)    
 
 
 if __name__ == "__main__":
