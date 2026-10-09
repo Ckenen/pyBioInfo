@@ -1,111 +1,61 @@
 #!/usr/bin/env python
-import sys
-from optparse import OptionParser
-import pysam
-from pyBioInfo.IO.File import BamFile, BedFile, VcfFile
-from pyBioInfo.Utils import SegmentTools, ShiftLoader
-
-
-class BamTools(object):
-    @classmethod
-    def extract(cls, args):
-        usage = "bamtools.py extract [options] input.bam output.bam"
-        parser = OptionParser(usage=usage)
-        parser.add_option("-c", "--chrom", dest="chrom", type="string")
-        parser.add_option("-s", "--start", dest="start",
-                          default=None, type="int")
-        parser.add_option("-e", "--end", dest="end", default=None, type="int")
-        options, args = parser.parse_args(args)
-
-        infile, outfile = args
-        chrom = options.chrom
-        start = options.start
-        end = options.end
-        assert chrom is not None
-
-        with pysam.AlignmentFile(infile) as f, pysam.AlignmentFile(outfile, "wb", template=f) as fw:
-            for segment in f.fetch(contig=chrom, start=start, end=end):
-                fw.write(segment)
-
-    @classmethod
-    def getevent(cls, args):
-        usage = "bamtools.py getevent input.bam output.bam"
-        parser = OptionParser(usage=usage)
-        options, args = parser.parse_args(args)
-        infile, outfile = args
-        with pysam.AlignmentFile(infile) as f, pysam.AlignmentFile(outfile, "wb", f) as fw:
-            for segment in f:
-                if segment.is_unmapped or segment.is_secondary or segment.is_supplementary:
-                    continue
-                bases = SegmentTools.get_reference_sequence_base(segment)
-                rc = ";".join(["%s,%d" % (k, bases[k]) for k in sorted(bases.keys())])
-                items = []
-                for e in SegmentTools.get_events(segment):
-                    if isinstance(e[3], list):
-                        e[3] = "/".join(map(str, e[3]))
-                    items.append(",".join(map(str, e)))
-                me = ";".join(items)
-                segment.set_tag("RC", rc)
-                segment.set_tag("ME", me)
-                fw.write(segment)
-                
-    @classmethod
-    def maskevent(cls, args):
-        usage = "bamtools.py maskevent input.bam snps.bed output.bam"
-        parser = OptionParser(usage=usage)
-        options, args = parser.parse_args(args)
-        infile1, infile2, outfile = args
-        
-        with BamFile(infile1) as f, BamFile(outfile, "wb", f) as fw:
-            if infile2.endswith(".bed") or infile2.endswith(".bed.gz"):
-                snps = BedFile(infile2)
-            elif infile2.endswith(".vcf") or infile2.endswith(".vcf.gz"):
-                snps = VcfFile(infile2)
-            loader = ShiftLoader(snps)
-            for align in f:
-                positions = set([snp.start for snp in loader.fetch(obj=align)])
-                segment = align.segment
-                events = []
-                for item in segment.get_tag("ME").split(";"):
-                    if item == "":
-                        continue
-                    e = item.split(",")
-                    if e[1] == "-" or e[2] == "-":
-                        continue
-                    if int(e[0]) in positions:
-                        continue
-                    events.append(item)
-                ce = ";".join(events)
-                segment.set_tag("CE", ce)
-                fw.write(align)
-
+import argparse
+from typing import cast
+from pyBioInfo.Tools import BamTools
 
 def main():
-    usage = """Usage:
-    bamtools.py command [args]
+    parser = argparse.ArgumentParser(description="A toolkit to process FAM file")
+    subparsers = parser.add_subparsers(title="Available subcommands", dest="command")
 
-Commands:
-    extract       extract sub-bam.
-    getevent      get mismatch events. (ME tag and RC tag)
-    maskevent     mask SNPs mismatch events. (CE tag)
-    """
+    sub_parser = subparsers.add_parser("bam-to-bed", help="Convert BAM to BED", description="Convert BAM to BED")
+    _ = sub_parser.add_argument("-i", "--input", dest="input", required=True, help="Input BAM file")
+    _ = sub_parser.add_argument("-o", "--output", dest="output", required=True, help="Output BED file")
+    _ = sub_parser.add_argument("-m", "--merge-fragment", type=bool, default=False, help="Merge fragment")
+    _ = sub_parser.add_argument("-f", "--fill-fragment-gap", type=bool, default=False, help="Fill gap between paired alignments")
+    _ = sub_parser.add_argument("-b", "--build-index", type=bool, default=False, help="Build index")
+    
+    sub_parser = subparsers.add_parser("extract-genome-sizes", help="Extract genome sizes from BAM file", description="Extract genome sizes from BAM file")
+    _ = sub_parser.add_argument("-i", "--input", dest="input", required=True, help="Input BAM file")
+    _ = sub_parser.add_argument("-o", "--output", dest="output", required=True, help="Output genome sizes file")
 
-    if len(sys.argv) < 2:
-        print(usage)
-        exit(1)
+    sub_parser = subparsers.add_parser("bam-to-bigwig", help="Convert BAM to BIGWIG", description="Convert BAM to BIGWIG")
+    _ = sub_parser.add_argument("-i", "--input", help="Input BAM file")
+    _ = sub_parser.add_argument("-o", "--output1", help="Output BIGWIG file")
+    _ = sub_parser.add_argument("-p", "--output2", help="Output BIGWIG file (For stranded)")
+    _ = sub_parser.add_argument("-m", "--merge-fragment", type=bool, default=False, help="Merge fragment")
+    _ = sub_parser.add_argument("-f", "--fill-fragment-gap", type=bool, default=False, help="Fill gap between paired alignments")
+    _ = sub_parser.add_argument("-s", "--scale", type=float, default=1, help="Scale factor")
+    _ = sub_parser.add_argument("-S", "--stranded", type=bool, default=False, help="Seperate by strand")  
 
-    command = sys.argv[1]
-    args = sys.argv[2:]
 
-    if command == "extract":
-        BamTools.extract(args)
-    elif command == "getevent":
-        BamTools.getevent(args)
-    elif command == "maskevent":
-        BamTools.maskevent(args)
-    else:
-        print(usage)
-        exit(1)
+    sub_parser = subparsers.add_parser("add-nh-hi-tag", help="Add NH and HI tag to BAM file", description="Add NH and HI tag to BAM file")
+    _ = sub_parser.add_argument("-i", "--input", help="Input BAM file")
+    _ = sub_parser.add_argument("-o", "--output", help="Output BAM file")
+    _ = sub_parser.add_argument("-t", "--threads", type=int, default=1, help="Number of threads")
+    _ = sub_parser.add_argument("-p", "--proper-pair", type=bool, default=False, help="Only output proper pairs")
+    _ = sub_parser.add_argument("-s", "--input-is-sorted", type=bool, default=False, help="Input BAM is sorted by read name. Otherwise it will be sorted by read name first")
+    _ = sub_parser.add_argument("-S", "--sort-output", type=bool, default=False, help="Sort the output BAM by coordinate. Otherwise the output BAM is sorted by read name")
+
+    sub_parser = subparsers.add_parser("stat-chrom-reads", help="Stat chrom reads", description="Stat chrom reads")
+    _ = sub_parser.add_argument("-i", "--input", help="Input BAM file")
+    _ = sub_parser.add_argument("-o", "--output", help="Output TSV/CSV file")
+    _ = sub_parser.add_argument("-p", "--primary-only", type=bool, default=False, help="Only count primary alignments")
+    _ = sub_parser.add_argument("-P", "--proper-pair-only", type=bool, default=False, help="Only count proper pair alignments")
+
+
+    args = parser.parse_args()
+    command = cast(str | None, args.command)
+    if command is None:
+        parser.print_help()
+        return
+    dispatch = {
+        "bam-to-bed": BamTools.bam_to_bed,
+        "bam-to-bigwig": BamTools.bam_to_bigwig,
+        "extract-genome-sizes": BamTools.extract_genome_sizes,
+        "add-nh-hi-tag": BamTools.add_nh_hi_tag,
+        "stat-chrom-reads": BamTools.stat_chrom_reads,
+    }
+    dispatch[command](args)
 
 
 if __name__ == "__main__":

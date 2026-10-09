@@ -213,23 +213,3 @@ class FragmentBuilder(object):
     def __iter__(self):
         return self.fragments()
 
-
-if __name__ == '__main__':
-    from pyBioInfo.IO.File import BamFile
-
-    path = "/home/chenzonggui/developing/pyBioInfo/911_0H_Input.bam"
-
-    # buffer = []
-    # with BamFile(path) as bam:
-    #     for i, alignment in enumerate(bam):
-    #         if i < 200000:
-    #             buffer.append(alignment)
-    #         elif i == 200000:
-    #             print("Finish!")
-
-    with BamFile(path) as bam:
-        i = 0
-        for fragment in FragmentBuilder(bam):
-            read1, read2 = fragment
-            i += 1
-            print(i)

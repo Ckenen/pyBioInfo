@@ -1,11 +1,6 @@
 #!/usr/scripts/env python
-import os
-import gzip
-import unittest
-import filecmp
-from pyBioInfo.IO.File import GffFile, GffRecord, GffTranscript, GffTranscriptBuilder, GffGene, GffGeneBuilder
-
 """
+
 SAMPLE GENES:
 
 chr1
@@ -70,61 +65,113 @@ rm gencode.v37.annotation.sample.gff3
 
 """
 
+import os
+import gzip
+import filecmp
+import unittest
+from pyBioInfo.IO.File import (
+    GffFile,
+    GffRecord,
+    GffTranscript,
+    GffTranscriptBuilder,
+    GffGene,
+    GffGeneBuilder,
+)
+
 DIR = os.path.dirname(__file__)
 
 
 class TestGffFile(unittest.TestCase):
-    def test_gff_file(self):
-        path1 = os.path.join(
+
+    def _gff_path(self) -> str:
+        """返回待测试的 GFF 样本文件路径。"""
+        return os.path.join(
             DIR, "data/gencode.v37.annotation.sample.sorted.gff3.gz")
-        path2 = os.path.join(
+
+    def _bed_path(self) -> str:
+        """返回 BED 输出文件路径。"""
+        return os.path.join(
             DIR, "data/gencode.v37.annotation.sample.sorted.gff3.bed")
-        path3 = os.path.join(
+
+    def _bed_ref_path(self) -> str:
+        """返回 BED 参考文件路径。"""
+        return os.path.join(
             DIR, "data/gencode.v37.annotation.sample.sorted.gff3.bed.ref")
 
-        num1 = 0  # All record
-        num2 = 0  # Transcript (feature == "transcript")
-        num3 = 0  # Gene (feature == "gene")
-        with gzip.open(path1, "rt") as f:
+    def _count_features(self) -> "tuple[int, int, int]":
+        """直接解析 GFF 文本，统计 (全部记录, transcript, gene) 的数量。"""
+        num_all = 0
+        num_transcript = 0
+        num_gene = 0
+        with gzip.open(self._gff_path(), "rt") as f:
             for line in f:
                 if line.startswith("#"):
                     continue
-                num1 += 1
+                num_all += 1
                 values = line.split("\t")
                 feature = values[2]
                 if feature == "transcript":
-                    num2 += 1
+                    num_transcript += 1
                 elif feature == "gene":
-                    num3 += 1
+                    num_gene += 1
+        return num_all, num_transcript, num_gene
 
-        # Read all records
-        records = []
-        with GffFile(path1) as gff:
+    def _load_records(self) -> "list[GffRecord]":
+        """使用 GffFile 读取样本文件中的全部记录。"""
+        records: "list[GffRecord]" = []
+        with GffFile(self._gff_path()) as gff:
             for record in gff:
                 records.append(record)
-        self.assertEqual(num1, len(records))
+        return records
 
-        # Build Transcripts
-        transcripts = list(GffTranscriptBuilder(records))
-        self.assertEqual(num2, len(transcripts))
+    def test_read_records(self) -> None:
+        """逐条读取 GFF 记录，数量应与文本解析结果一致。"""
+        num_all, _, _ = self._count_features()
+        records = self._load_records()
+        self.assertEqual(num_all, len(records))
+        for record in records[:3]:
+            with self.subTest(chrom=record.chrom):
+                self.assertIsInstance(record, GffRecord)
+
+    def test_build_transcripts(self) -> None:
+        """从记录构建转录本，数量与顺序（基因组坐标升序）校验。"""
+        _, num_transcript, _ = self._count_features()
+        records = self._load_records()
+        transcripts: "list[GffTranscript]" = list(GffTranscriptBuilder(records))
+        self.assertEqual(num_transcript, len(transcripts))
+        for transcript in transcripts[:3]:
+            with self.subTest(name=transcript.name):
+                self.assertIsInstance(transcript, GffTranscript)
         for i in range(len(transcripts) - 1):
-            assert transcripts[i] <= transcripts[i + 1]
+            with self.subTest(index=i):
+                self.assertLessEqual(transcripts[i], transcripts[i + 1])
 
-        # Genes
-        genes = list(GffGeneBuilder(records))
-        self.assertEqual(num3, len(genes))
+    def test_build_genes(self) -> None:
+        """从记录构建基因，数量与顺序（基因组坐标升序）校验。"""
+        _, _, num_gene = self._count_features()
+        records = self._load_records()
+        genes: "list[GffGene]" = list(GffGeneBuilder(records))
+        self.assertEqual(num_gene, len(genes))
+        for gene in genes[:3]:
+            with self.subTest(name=gene.name):
+                self.assertIsInstance(gene, GffGene)
         for i in range(len(genes) - 1):
-            assert genes[i] <= genes[i + 1]
+            with self.subTest(index=i):
+                self.assertLessEqual(genes[i], genes[i + 1])
 
-        # Convert to BED format
-        with open(path2, "w+") as fw:
-            # When the chrom, start and end of two transcripts are exactly the 
-            # same, their order cannot be guaranteed, so they are sorted 
+    def test_transcripts_to_bed(self) -> None:
+        """将转录本转换为 BED 格式，输出应与参考文件完全一致。"""
+        records = self._load_records()
+        transcripts: "list[GffTranscript]" = list(GffTranscriptBuilder(records))
+        with open(self._bed_path(), "w+") as fw:
+            # When the chrom, start and end of two transcripts are exactly the
+            # same, their order cannot be guaranteed, so they are sorted
             # according to their names
-            for transcript in sorted(transcripts, key=lambda item: item.name):
-                fw.write(transcript.format("BED") + "\n")
-        self.assertTrue(filecmp.cmp(path2, path3))
+            for transcript in sorted(
+                    transcripts, key=lambda item: item.name or ""):
+                _ = fw.write(transcript.format("BED") + "\n")
+        self.assertTrue(filecmp.cmp(self._bed_path(), self._bed_ref_path()))
 
 
 if __name__ == '__main__':
-    unittest.main()
+    _ = unittest.main()

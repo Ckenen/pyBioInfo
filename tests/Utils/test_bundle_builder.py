@@ -1,29 +1,29 @@
 #!/usr/scripts/env python
 
 import unittest
-from pyBioInfo.Range import CRange
+from pyBioInfo.Range import GRange
 from pyBioInfo.Utils import BundleBuilder
 
 
 class TestBundleBuilder(unittest.TestCase):
     def test_bundle_builder(self):
         array = [
-            CRange(chrom="chr1", start=10, end=20),
-            CRange(chrom="chr1", start=15, end=25),
-            CRange(chrom="chr1", start=20, end=30),
-            CRange(chrom="chr1", start=25, end=35),
-            CRange(chrom="chr1", start=50, end=60),
-            CRange(chrom="chr1", start=80, end=90),
-            CRange(chrom="chr2", start=10, end=20),
-            CRange(chrom="chr2", start=50, end=60),
-            CRange(chrom="chr2", start=70, end=90),
-            CRange(chrom="chr2", start=80, end=90),
-            CRange(chrom="chr2", start=85, end=90),
-            CRange(chrom="chr2", start=90, end=100),
-            CRange(chrom="chr3", start=10, end=20),
-            CRange(chrom="chr3", start=10, end=20),
-            CRange(chrom="chr3", start=10, end=20),
-            CRange(chrom="chr3", start=10, end=20),
+            GRange(chrom="chr1", start=10, end=20),
+            GRange(chrom="chr1", start=15, end=25),
+            GRange(chrom="chr1", start=20, end=30),
+            GRange(chrom="chr1", start=25, end=35),
+            GRange(chrom="chr1", start=50, end=60),
+            GRange(chrom="chr1", start=80, end=90),
+            GRange(chrom="chr2", start=10, end=20),
+            GRange(chrom="chr2", start=50, end=60),
+            GRange(chrom="chr2", start=70, end=90),
+            GRange(chrom="chr2", start=80, end=90),
+            GRange(chrom="chr2", start=85, end=90),
+            GRange(chrom="chr2", start=90, end=100),
+            GRange(chrom="chr3", start=10, end=20),
+            GRange(chrom="chr3", start=10, end=20),
+            GRange(chrom="chr3", start=10, end=20),
+            GRange(chrom="chr3", start=10, end=20),
         ]
 
         results = [

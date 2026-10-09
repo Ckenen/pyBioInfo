@@ -1,116 +1,109 @@
-#!/usr/scripts/env python
+# Testing module of pyBioInfo.Range.interval_range
 
 import unittest
+
 from pyBioInfo.Range import IRange
 
 
-class TestIntervalRange(unittest.TestCase):
-    def test_interval_range(self):
-        """
-        Constructor
-        """
-        self.assertRaises(ValueError, IRange, -1, 10)  # start < 0
-        self.assertRaises(ValueError, IRange, 10, 9)  # start < end
-        self.assertRaises(ValueError, IRange, 10, 10)  # start == end
+class TestIRange(unittest.TestCase):
+    """Testing class of pyBioInfo.Range.interval_range.IRange."""
+
+    def test_constructor(self):
+        """Construction with read-only start and end attributes."""
+        obj = IRange(5, 15)
+        self.assertEqual(5, obj.start)
+        self.assertEqual(15, obj.end)
+        # start must be >= 0 and start < end.
+        self.assertRaises(ValueError, IRange, -1, 10)
+        self.assertRaises(ValueError, IRange, 20, 10)
+        self.assertRaises(ValueError, IRange, 10, 10)
+        # Non-integer coordinates are rejected by the comparison.
         self.assertRaises(TypeError, IRange, "10", 20)
 
-        """
-        Attributes
-        """
-        obj = IRange(10, 20)
-        self.assertEqual(len(obj), 10)
-        # Getter
-        self.assertEqual(obj.start, 10)  # start == 10
-        self.assertEqual(obj.end, 20)  # end == 20
-        self.assertEqual(len(obj), 20 - 10)  # len()
-        self.assertEqual(obj[0], 10)
-        self.assertEqual(obj[1], 20)
-        self.assertEqual(tuple([value for value in obj]), (10, 20))
-        # Setter
-        self.assertRaises(AttributeError, obj.__setattr__, "start", 5)
-        self.assertRaises(AttributeError, obj.__setattr__, "end", 25)
-        self.assertRaises(AttributeError, obj.__setattr__, "name", "value")
+    def test_read_only_attributes(self):
+        """The start and end attributes can not be overwritten."""
+        obj = IRange(5, 15)
+        self.assertRaises(AttributeError, setattr, obj, "start", 8)
+        self.assertRaises(AttributeError, setattr, obj, "end", 18)
 
-        """
-        Index and position
-        """
+    def test_distance_relationships(self):
+        """Distance relations and the get_distance sign convention."""
         obj = IRange(10, 20)
-        indexes1 = list(range(10))
-        indexes2 = list(range(-10, 0))
-        positions = list(range(10, 20))
-        for index1, index2, position in zip(indexes1, indexes2, positions):
-            self.assertEqual(obj.get_index(position), index1)
-            self.assertEqual(obj.get_position(index1), position)
-            self.assertEqual(obj.get_position(index2), position)
+        # (start, end): (is_overlap, is_adjacent, is_away, is_contact)
+        matrix = [
+            ((0, 5), (False, False, True, False)),    # strictly away
+            ((0, 10), (False, True, False, True)),    # adjacent at the start
+            ((0, 15), (True, False, False, True)),    # overlapping the start
+            ((0, 25), (True, False, False, True)),    # covering
+            ((5, 15), (True, False, False, True)),
+            ((15, 25), (True, False, False, True)),   # overlapping the end
+            ((20, 25), (False, True, False, True)),   # adjacent at the end
+            ((25, 30), (False, False, True, False)),  # strictly away
+        ]
+        for (start, end), expected in matrix:
+            other = IRange(start, end)
+            overlap, adjacent, away, contact = expected
+            self.assertEqual(overlap, obj.is_overlap(other), (start, end))
+            self.assertEqual(adjacent, obj.is_adjacent(other), (start, end))
+            self.assertEqual(away, obj.is_away(other), (start, end))
+            self.assertEqual(contact, obj.is_contact(other), (start, end))
+        # Sign convention of get_distance: max(starts) - min(ends), i.e.
+        # negative = overlap length, 0 = adjacent, positive = gap length.
+        self.assertEqual(-5, obj.get_distance(IRange(15, 25)))
+        self.assertEqual(0, obj.get_distance(IRange(0, 10)))
+        self.assertEqual(5, obj.get_distance(IRange(25, 30)))
+
+    def test_index_and_position(self):
+        """Index/position conversion between coordinates and offsets."""
+        obj = IRange(10, 20)
+        # Coordinate -> 0-based index.
+        self.assertEqual(0, obj.get_index(10))
+        self.assertEqual(2, obj.get_index(12))
+        self.assertEqual(9, obj.get_index(19))
         self.assertRaises(ValueError, obj.get_index, 9)
-        self.assertRaises(ValueError, obj.get_index, 21)
-        self.assertRaises(ValueError, obj.get_position, -11)
+        self.assertRaises(ValueError, obj.get_index, 20)
+        # Index -> coordinate, negative indexes count from the end.
+        self.assertEqual(10, obj.get_position(0))
+        self.assertEqual(12, obj.get_position(2))
+        self.assertEqual(19, obj.get_position(9))
+        self.assertEqual(19, obj.get_position(-1))
+        self.assertEqual(10, obj.get_position(-10))
         self.assertRaises(ValueError, obj.get_position, 10)
+        self.assertRaises(ValueError, obj.get_position, -11)
 
-        """
-        Comparison
-        """
-        obj1 = IRange(10, 20)
-        obj2 = IRange(10, 25)
-        obj3 = IRange(5, 25)
-        obj4 = IRange(15, 20)
-        self.assertGreater(obj1, obj3)
-        self.assertGreater(obj2, obj1)
-        self.assertGreater(obj2, obj3)
-        self.assertGreater(obj4, obj1)
-        self.assertGreater(obj4, obj2)
-        self.assertGreater(obj4, obj3)
-        self.assertLess(obj3, obj1)
-        self.assertLess(obj3, obj2)
-        self.assertLess(obj3, obj4)
+    def test_sequence_protocol(self):
+        """len(), str(), iteration and indexing as a 2-element sequence."""
+        obj = IRange(10, 20)
+        self.assertEqual(10, len(obj))
+        self.assertEqual("IRange: 10-20", str(obj))
+        start, end = obj
+        self.assertEqual((10, 20), (start, end))
+        self.assertEqual([10, 20], list(iter(obj)))
+        self.assertEqual(10, obj[0])
+        self.assertEqual(20, obj[1])
+        self.assertRaises(RuntimeError, obj.__getitem__, 2)
+        self.assertRaises(RuntimeError, obj.__setitem__, 0, 15)
+        self.assertRaises(RuntimeError, obj.__setitem__, 1, 25)
 
-        """
-        Distance
-        """
+    def test_comparison(self):
+        """Ordering by start first, then by end (coordinates only)."""
         obj1 = IRange(10, 20)
         obj2 = IRange(15, 25)
-        obj3 = IRange(20, 30)
-        obj4 = IRange(25, 30)
-        # overlap
-        self.assertTrue(obj1.is_overlap(obj2))
-        self.assertFalse(obj1.is_overlap(obj3))
-        self.assertFalse(obj1.is_overlap(obj4))
-        self.assertTrue(obj2.is_overlap(obj1))
-        self.assertTrue(obj2.is_overlap(obj3))
-        self.assertFalse(obj2.is_overlap(obj4))
-        self.assertFalse(obj3.is_overlap(obj1))
-        self.assertTrue(obj3.is_overlap(obj2))
-        self.assertTrue(obj3.is_overlap(obj4))
-        self.assertFalse(obj4.is_overlap(obj1))
-        self.assertFalse(obj4.is_overlap(obj2))
-        self.assertTrue(obj4.is_overlap(obj3))
-        # away
-        self.assertFalse(obj1.is_away(obj2))
-        self.assertFalse(obj1.is_away(obj3))
-        self.assertTrue(obj1.is_away(obj4))
-        self.assertFalse(obj2.is_away(obj1))
-        self.assertFalse(obj2.is_away(obj3))
-        self.assertFalse(obj2.is_away(obj4))
-        self.assertFalse(obj3.is_away(obj1))
-        self.assertFalse(obj3.is_away(obj2))
-        self.assertFalse(obj3.is_away(obj4))
-        self.assertTrue(obj4.is_away(obj1))
-        self.assertFalse(obj4.is_away(obj2))
-        self.assertFalse(obj4.is_away(obj3))
-        # dajacent
-        self.assertFalse(obj1.is_adjacent(obj2))
-        self.assertTrue(obj1.is_adjacent(obj3))
-        self.assertFalse(obj1.is_adjacent(obj4))
-        self.assertFalse(obj2.is_adjacent(obj1))
-        self.assertFalse(obj2.is_adjacent(obj3))
-        self.assertTrue(obj2.is_adjacent(obj4))
-        self.assertTrue(obj3.is_adjacent(obj1))
-        self.assertFalse(obj3.is_adjacent(obj2))
-        self.assertFalse(obj3.is_adjacent(obj4))
-        self.assertFalse(obj4.is_adjacent(obj1))
-        self.assertTrue(obj4.is_adjacent(obj2))
-        self.assertFalse(obj4.is_adjacent(obj3))
+        self.assertLess(obj1, obj2)
+        self.assertGreater(obj2, obj1)
+        self.assertLessEqual(obj1, IRange(10, 20))
+        self.assertGreaterEqual(obj2, IRange(15, 25))
+        # Same start: ordered by the end coordinate.
+        self.assertLess(IRange(10, 20), IRange(10, 30))
+        # Equality of the sort key.
+        self.assertEqual(obj1, IRange(10, 20))
+        self.assertNotEqual(obj1, obj2)
+        self.assertNotEqual(obj1, 123)
+        # Usable with sorted / min.
+        items = [IRange(20, 30), IRange(5, 15), IRange(10, 25), IRange(5, 10)]
+        self.assertEqual([(5, 10), (5, 15), (10, 25), (20, 30)], [tuple(x) for x in sorted(items)])
+        self.assertEqual((5, 10), tuple(min(items)))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

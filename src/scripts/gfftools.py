@@ -2,7 +2,7 @@
 import sys
 import os
 import pandas as pd
-from pyBioInfo.Range import GRange
+from pyBioInfo.Range import TRange
 
 
 class Table(object):
@@ -103,7 +103,7 @@ class Transcript(object):
             assert len(set(strands)) == 1
             chrom = chroms[0]
             strand = strands[0]
-            obj = GRange(chrom=chrom, strand=strand, name=tid, blocks=blocks, thick=thick)
+            obj = TRange(chrom=chrom, strand=strand, name=tid, blocks=blocks, thick=thick)
             transcripts.append(obj)
         with open(self.path_out, "w+") as fw:
             for transcript in sorted(transcripts):

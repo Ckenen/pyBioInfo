@@ -1,0 +1,27 @@
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+
+version: 2
+
+build:
+  os: ubuntu-22.04
+  tools:
+    python: "3.11"
+
+# Build documentation in the doc/ directory with Sphinx
+sphinx:
+  configuration: doc/source/conf.py
+  # Fail the build on warnings to keep the docs healthy
+  fail_on_warning: false
+
+# Install the documentation requirements and the package itself,
+# so that sphinx.ext.autodoc can import pyBioInfo and its dependencies.
+python:
+  install:
+    - requirements: doc/requirements.txt
+    - method: pip
+      path: .
+
+# Build all formats (HTML is always built; add others as needed)
+formats:
+  - pdf

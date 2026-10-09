@@ -1,7 +1,7 @@
-from pyBioInfo.Range import GRange
+from pyBioInfo.Range import TRange
 
 
-class Transcript(GRange):
+class Transcript(TRange):
     def __init__(self, obj=None, **kwargs):
         if obj is None:
             super(Transcript, self).__init__(**kwargs)

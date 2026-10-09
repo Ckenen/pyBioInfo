@@ -1,9 +1,19 @@
 import functools
+from collections.abc import Iterable, Sequence
+
 
 class BlockTools(object):
-    
+    """
+    BlockTools is a collection of static utilities for block lists.
+
+    A "block" is a half-open interval [start, end) represented as a
+    two-element sequence; a block list is a sequence of such blocks,
+    usually sorted by coordinates and non-overlapping (see
+    :py:meth:`check_blocks`).
+    """
+
     @classmethod
-    def check_blocks(cls, blocks):
+    def check_blocks(cls, blocks: "Sequence[Sequence[int]]") -> None:
         """Ensure the value of the coordinate of blocks are valid.
         
         Rules:
@@ -31,7 +41,7 @@ class BlockTools(object):
             y0 = y
             
     @classmethod
-    def is_valid_blocks(cls, blocks):
+    def is_valid_blocks(cls, blocks: "Sequence[Sequence[int]]") -> bool:
         """Return whether the blocks are valid.
 
         Args:
@@ -50,7 +60,7 @@ class BlockTools(object):
         return True
     
     @classmethod
-    def check_sorted(cls, blocks):
+    def check_sorted(cls, blocks: "Sequence[Sequence[int]]") -> None:
         """Check the blocks are sorted by coordinates.
 
         Args:
@@ -59,15 +69,16 @@ class BlockTools(object):
         Raises:
             ValueError: The blocks are unsorted.
         """
-        x0, y0 = None, None
+        x0: "int | None" = None
+        y0: "int | None" = None
         for x, y in blocks:
-            if x0 is not None:
+            if x0 is not None and y0 is not None:
                 if (x < x0) or (x == x0 and y < y0):
                     raise ValueError("The blocks are unsorted!")
             x0, y0 = x, y
             
     @classmethod
-    def is_sorted(cls, blocks):
+    def is_sorted(cls, blocks: "Sequence[Sequence[int]]") -> bool:
         """Return whether the blocks are sorted by coordinates.
 
         Args:
@@ -76,16 +87,17 @@ class BlockTools(object):
         Returns:
             bool: `True` if the blocks are sorted.
         """
-        x0, y0 = None, None
+        x0: "int | None" = None
+        y0: "int | None" = None
         for x, y in blocks:
-            if x0 is not None:
+            if x0 is not None and y0 is not None:
                 if (x < x0) or (x == x0 and y < y0):
                     return False
             x0, y0 = x, y
         return True
     
     @classmethod
-    def _full_block_comparison(cls, block1, block2):
+    def _full_block_comparison(cls, block1: "Sequence[int]", block2: "Sequence[int]") -> int:
         """Comparison between blocks by both start and end coordinates.
 
         Args:
@@ -107,7 +119,7 @@ class BlockTools(object):
         return 1
 
     @classmethod
-    def sorted(cls, blocks):
+    def sorted(cls, blocks: "Iterable[Sequence[int]]") -> "list[Sequence[int]]":
         """Sorting blocks.
 
         Args:
@@ -116,10 +128,10 @@ class BlockTools(object):
         Returns:
             list: new list of sorted blocks.
         """
-        return list(sorted(blocks, key=functools.cmp_to_key(cls._full_block_comparison)))
+        return sorted(blocks, key=functools.cmp_to_key(cls._full_block_comparison))
 
     @classmethod
-    def get_length(cls, blocks):
+    def get_length(cls, blocks: "Iterable[Sequence[int]]") -> int:
         """Get the summation length of all blocks.
 
         Args:
@@ -131,8 +143,12 @@ class BlockTools(object):
         return sum([y - x for x, y in blocks])
 
     @classmethod
-    def get_index(cls, blocks, position, reverse=False, length=None):
+    def get_index(cls, blocks: "Iterable[Sequence[int]]", position: int,
+                  reverse: bool = False, length: "int | None" = None) -> int:
         """Get the index of certain position in blocks.
+
+        Indexes run over the concatenated blocks, skipping the gaps
+        between them.
 
         Args:
             blocks (list): list of blocks.
@@ -141,12 +157,12 @@ class BlockTools(object):
             length (int, optional): the summation length of all blocks. Defaults to None.
 
         Raises:
-            ValueError: _description_
+            ValueError: The position is not covered by any block.
 
         Returns:
             int: Index of certain position.
         """
-        index = None
+        index: "int | None" = None
         offset = 0
         for x, y in blocks:
             if position >= y:
@@ -165,23 +181,29 @@ class BlockTools(object):
         return index
     
     @classmethod
-    def get_position(cls, blocks, index, reverse=False, length=None):
+    def get_position(cls, blocks: "Iterable[Sequence[int]]", index: int,
+                     reverse: bool = False, length: "int | None" = None) -> int:
         """Get the position of certain index in blocks.
 
+        Indexes run over the concatenated blocks, skipping the gaps
+        between them; negative indexes count from the end.
+
         Args:
-            blocks (list): _description_
-            index (int): _description_
-            reverse (bool, optional): _description_. Defaults to False.
-            length (int, optional): _description_. Defaults to None.
+            blocks (list): list of blocks.
+            index (int): 0-based index within the concatenated blocks.
+            reverse (bool, optional): treat the index as on the reverse
+                strand. Defaults to False.
+            length (int, optional): the summation length of all blocks.
+                Defaults to None.
 
         Raises:
-            ValueError: _description_
-            RuntimeError: _description_
+            ValueError: The index is out of the blocks range.
+            RuntimeError: The index is not covered by any block (invalid blocks).
 
         Returns:
             int: Position of certain index.
         """
-        position = None
+        position: "int | None" = None
         if length is None:
             length = cls.get_length(blocks)
         if index >= length or index < -length:
@@ -200,10 +222,13 @@ class BlockTools(object):
                 break
             else:
                 raise RuntimeError("Unknown error.")
+        if position is None:
+            # Only reachable with invalid blocks (total length mismatch).
+            raise RuntimeError("Index (%d) not found in blocks." % index)
         return position
     
     @classmethod
-    def is_include(cls, blocks, position):
+    def is_include(cls, blocks: "Iterable[Sequence[int]]", position: int) -> bool:
         """Determine if `position` is included in blocks.
 
         Args:
@@ -223,7 +248,7 @@ class BlockTools(object):
         return False
     
     @classmethod
-    def move(cls, blocks, step=0):
+    def move(cls, blocks: "Sequence[Sequence[int]]", step: int = 0) -> "list[tuple[int, int]]":
         """Move blocks.
 
         Args:
@@ -236,7 +261,7 @@ class BlockTools(object):
         Returns:
             list: new list of blocks.
         """
-        blocks2 = []
+        blocks2: "list[tuple[int, int]]" = []
         if blocks[0][0] + step < 0:
             raise RuntimeError("Invalid blocks after moving.")
         for x, y in blocks:
@@ -244,8 +269,8 @@ class BlockTools(object):
         return blocks2
 
     @classmethod
-    def gaps(cls, blocks):
-        """_summary_
+    def gaps(cls, blocks: "Iterable[Sequence[int]]") -> "list[tuple[int, int]]":
+        """Get the gaps between adjacent blocks.
 
         Args:
             blocks (list): list of blocks.
@@ -253,18 +278,20 @@ class BlockTools(object):
         Returns:
             list: list of gaps.
         """
-        blocks2 = []
-        x0, y0 = None, None
+        blocks2: "list[tuple[int, int]]" = []
+        previous_end: "int | None" = None
         for x, y in blocks:
-            if x0 is not None:
-                blocks2.append((y0, x))
-            x0 = x
-            y0 = y
+            if previous_end is not None:
+                blocks2.append((previous_end, x))
+            previous_end = y
         return blocks2
 
     @classmethod
-    def suture(cls, blocks, gap=0):
+    def suture(cls, blocks: "Iterable[Sequence[int]]", gap: int = 0) -> "list[tuple[int, int]]":
         """Filling the gaps between blocks.
+
+        Adjacent blocks whose gap size is not larger than `gap` are
+        merged into a single block.
 
         Args:
             blocks (list): list of blocks.
@@ -273,23 +300,23 @@ class BlockTools(object):
         Returns:
             list: list of blocks after suturing.
         """
-        blocks2 = []
-        x0, y0 = None, None
-        for x, y in blocks:
-            if x0 is None:
-                x0, y0 = x, y
+        blocks2: "list[tuple[int, int]]" = []
+        iterator = iter(blocks)
+        first = next(iterator, None)
+        if first is None:
+            return blocks2
+        x0, y0 = first
+        for x, y in iterator:
+            if x - y0 <= gap:
+                x0, y0 = min(x0, x), max(y0, y)
             else:
-                if x - y0 <= gap:
-                    x0, y0 = min(x0, x), max(y0, y)
-                else:
-                    blocks2.append((x0, y0))
-                    x0, y0 = x, y
-        if x0 is not None:
-            blocks2.append((x0, y0))
+                blocks2.append((x0, y0))
+                x0, y0 = x, y
+        blocks2.append((x0, y0))
         return blocks2
 
     @classmethod
-    def fusion(cls, blocks1, blocks2):
+    def fusion(cls, blocks1: "Iterable[Sequence[int]]", blocks2: "Iterable[Sequence[int]]") -> "list[tuple[int, int]]":
         """Merge two lists of blocks into one.
 
         Args:
@@ -299,24 +326,23 @@ class BlockTools(object):
         Returns:
             list: list of fusion blocks.
         """
-        blocks = []
-        for block in blocks1:
-            blocks.append(block)
-        for block in blocks2:
-            blocks.append(block)
-        blocks = list(sorted(blocks, key=lambda item: item[0]))
+        blocks: "list[Sequence[int]]" = list(blocks1) + list(blocks2)
+        blocks = sorted(blocks, key=lambda item: item[0])
         return cls.suture(blocks, 0)
         
     @classmethod
-    def is_contain(cls, blocks1, blocks2):
-        """_summary_
+    def is_contain(cls, blocks1: "Sequence[Sequence[int]]", blocks2: "Sequence[Sequence[int]]") -> bool:
+        """Return whether `blocks1` fully covers `blocks2`.
+
+        Every block (or fragment) of `blocks2` must be covered by the
+        blocks of `blocks1`.
 
         Args:
-            blocks1 (list): _description_
-            blocks2 (list): _description_
+            blocks1 (list): list of covering blocks.
+            blocks2 (list): list of covered blocks.
 
         Returns:
-            bool: _description_
+            bool: `True` if `blocks1` contains `blocks2`.
         """
         is_contain = True
         length1 = len(blocks1)
@@ -352,77 +378,218 @@ class BlockTools(object):
         return is_contain
 
     @classmethod
-    def is_coincide(cls, blocks1, blocks2):
-        """_summary_
+    def is_coincide(cls, 
+        blocks_ref: "Sequence[Sequence[int]]", 
+        blocks_que: "Sequence[Sequence[int]]", 
+        tolerance: int = 0) -> bool:
+        """Return whether `blocks_que` coincides with `blocks_ref`.
+
+        `blocks_que` must have no more blocks than `blocks_ref`. The
+        blocks of `blocks_que` must match a consecutive run of the
+        blocks of `blocks_ref` (no reference block may be skipped). The
+        first block of `blocks_que` may start later than the reference
+        block it aligns to, and its last block may end earlier;
+        intermediate block boundaries may differ by up to `tolerance`.
+        The check is directional.
 
         Args:
-            blocks1 (list): _description_
-            blocks2 (list): _description_
+            blocks_ref (list): list of reference blocks.
+            blocks_que (list): list of query blocks.
+            tolerance (int, optional): allowed boundary deviation for
+                intermediate blocks. Defaults to 0.
 
         Returns:
-            bool: _description_
+            bool: `True` if `blocks_que` coincides with `blocks_ref`.
         """
-        is_coincide = True
-        length1 = len(blocks1)
-        length2 = len(blocks2)
-        index1 = 0
-        index2 = 0
-        while index2 < length2:
-            start2, end2 = blocks2[index2]
-            while True:
-                if index1 >= length1:
-                    is_coincide = False
-                    break
-                start1, end1 = blocks1[index1]
-                if start1 < start2:
-                    if start2 >= end1:
-                        index1 += 1
-                        continue
-                    else:
-                        if end1 < end2:
-                            is_coincide = False
-                            break
-                        elif end1 == end2:
-                            if index2 == 0:
-                                index1 += 1
-                                break
-                            else:
-                                is_coincide = False
-                                break
-                        else:
-                            if index2 == 0 and length2 == 1:
-                                break
-                            else:
-                                is_coincide = False
-                                break
 
-                elif start1 == start2:
-                    if end1 < end2:
-                        is_coincide = False
-                        break
-                    elif end1 == end2:
-                        index1 += 1
-                        break
+        count_ref = len(blocks_ref)
+        count_que = len(blocks_que)
+        if count_ref < count_que:
+            return False
+
+        for offset in range(count_ref - count_que + 1):
+            matched = True
+            for i_que, (start_que, end_que) in enumerate(blocks_que):
+                i_ref = offset + i_que
+                start_ref, end_ref = blocks_ref[i_ref]
+
+                if i_que == 0:
+                    if i_ref == 0:
+                        matched = start_que < end_ref
                     else:
-                        if index2 == length2 - 1:
-                            break
-                        else:
-                            is_coincide = False
-                            break
+                        matched = start_que < end_ref \
+                            and start_que >= start_ref - tolerance \
+                            and start_que > blocks_ref[i_ref - 1][1]
                 else:
-                    is_coincide = False
+                    if i_ref == 0:
+                        raise RuntimeError("Invalid blocks after moving.")
+                    else:
+                        matched = start_que < end_ref \
+                            and abs(start_que - start_ref) <= tolerance \
+                            and start_que > blocks_ref[i_ref - 1][1]
+                if not matched:
                     break
-            if not is_coincide:
-                break
-            index2 += 1
 
-        return is_coincide
+                if i_que == count_que - 1:
+                    if i_ref == count_ref - 1:
+                        matched = end_que > start_ref
+                    else:
+                        matched = end_que > start_ref \
+                            and end_que <= end_ref + tolerance \
+                            and end_que < blocks_ref[i_ref + 1][0]
+                else:
+                    if i_ref == count_ref - 1:
+                        raise RuntimeError("Invalid blocks after moving.")
+                    else:
+                        matched = end_que > start_ref \
+                            and abs(end_que - end_ref) <= tolerance \
+                            and end_que < blocks_ref[i_ref + 1][0]
+                if not matched:
+                    break
+                
+            if matched:
+                return True
+
+        return False
 
     @classmethod
-    def clip(cls, blocks, start, end, template=None,
-             extend=False, extend_left=False, extend_right=False,
-             supply=False, supply_left=False, supply_right=False,
-             limited=None, suture=False):
+    def get_boundary_bias(cls, blocks_ref: "Sequence[Sequence[int]]", blocks_que: "Sequence[Sequence[int]]") -> "tuple[int, int]":
+        """Get the boundary bias of `blocks_que` relative to `blocks_ref`.
+
+        The boundary of a block list is defined by the smallest block
+        start and the largest block end (both lists are assumed sorted).
+        The difference is measured per boundary:
+
+        - ``start``: how far ``blocks_que``'s start lies from
+          ``blocks_ref``'s start. Negative when ``blocks_que`` starts
+          earlier (outside on the left), positive when it starts later
+          (inside).
+        - ``end``: how far ``blocks_que``'s end lies from
+          ``blocks_ref``'s end. Positive when ``blocks_que`` ends later
+          (outside on the right), negative when it ends earlier
+          (inside).
+
+        When a boundary lies outside ``blocks_ref`` the plain coordinate
+        difference is used; when it lies inside, the block-aware index
+        (gaps skipped) is used instead.
+
+        Args:
+            blocks_ref (list): list of reference blocks.
+            blocks_que (list): list of query blocks.
+
+        Raises:
+            ValueError: If either block list is invalid, or if a query
+                boundary falls inside a gap of ``blocks_ref``.
+
+        Returns:
+            tuple: (start_difference, end_difference).
+        """
+        cls.check_blocks(blocks_ref)
+        cls.check_blocks(blocks_que)
+
+        start1=  blocks_ref[0][0]
+        end1 = blocks_ref[-1][1]
+        start2 = blocks_que[0][0]
+        end2 = blocks_que[-1][1]
+
+        if start2 <= start1:
+            difference_start = start2 - start1
+        else:
+            try:
+                difference_start = cls.get_index(blocks_ref, start2)
+            except ValueError:
+                raise ValueError(f"Query start {start2} falls inside a gap of reference blocks.")
+                
+        if end2 >= end1:
+            difference_end = end2 - end1
+        else:
+            try:
+                difference_end = cls.get_index(blocks_ref, end2 - 1) - cls.get_length(blocks_ref)
+            except ValueError:
+                raise ValueError(f"Query end {end2} falls inside a gap of reference blocks.")
+
+        return difference_start, difference_end
+
+    @classmethod
+    def is_matched_gap(cls, blocks_ref: "Sequence[Sequence[int]]", blocks_que: "Sequence[Sequence[int]]",
+                       tolerance: int = 0) -> bool:
+        """Return whether the gaps of `blocks_que` match a subset of the gaps of `blocks_ref`.
+
+        `blocks_que` must have no more blocks than `blocks_ref`. The
+        first gap of `blocks_que` may match any gap of `blocks_ref`;
+        once matched, the remaining gaps of `blocks_que` must match the
+        following gaps of `blocks_ref` consecutively. A gap matches when
+        both its start and its end differ by no more than `tolerance`.
+
+        Args:
+            blocks_ref (list): list of reference blocks.
+            blocks_que (list): list of query blocks.
+            tolerance (int, optional): allowed coordinate deviation for
+                each gap boundary. Defaults to 0.
+
+        Raises:
+            ValueError: If either block list is invalid.
+
+        Returns:
+            bool: `True` if the gaps of `blocks_que` match a consecutive
+                run of the gaps of `blocks_ref`.
+        """
+        cls.check_blocks(blocks_ref)
+        cls.check_blocks(blocks_que)
+        if len(blocks_que) > len(blocks_ref):
+            return False
+        gaps_ref = cls.gaps(blocks_ref)
+        gaps_que = cls.gaps(blocks_que)
+        if not gaps_que:
+            return True
+        # The first query gap may match any reference gap; once matched,
+        # the remaining query gaps must match consecutively.
+        for start in range(len(gaps_ref) - len(gaps_que) + 1):
+            matched = True
+            for i, (qs, qe) in enumerate(gaps_que):
+                rs, re = gaps_ref[start + i]
+                if abs(rs - qs) > tolerance or abs(re - qe) > tolerance:
+                    matched = False
+                    break
+            if matched:
+                return True
+        return False
+
+    @classmethod
+    def clip(cls, blocks: "Sequence[Sequence[int]]", start: int, end: int,
+             template: "Sequence[Sequence[int]] | None" = None,
+             extend: bool = False, extend_left: bool = False, extend_right: bool = False,
+             supply: bool = False, supply_left: bool = False, supply_right: bool = False,
+             limited: "tuple[int, int] | None" = None, suture: bool = False) -> "list[tuple[int, int]]":
+        """Clip the blocks to the window [start, end).
+
+        Only the blocks (or block fragments) inside the window are kept.
+        Optionally, the clipped result may be extended towards the
+        template blocks and supplied with plain filler blocks.
+
+        Args:
+            blocks (list): list of blocks to clip.
+            start (int): window start (inclusive), must be >= 0.
+            end (int): window end (exclusive), must be > start.
+            template (list, optional): template blocks limiting the
+                extend regions. Defaults to None.
+            extend (bool, optional): enable both-side extension. Defaults to False.
+            extend_left (bool, optional): enable left-side extension. Defaults to False.
+            extend_right (bool, optional): enable right-side extension. Defaults to False.
+            supply (bool, optional): enable both-side supply. Defaults to False.
+            supply_left (bool, optional): enable left-side supply. Defaults to False.
+            supply_right (bool, optional): enable right-side supply. Defaults to False.
+            limited (tuple, optional): valid range (start, end) for the
+                supply regions. Defaults to None.
+            suture (bool, optional): suture the result blocks. Defaults to False.
+
+        Raises:
+            ValueError: Invalid window or template coordinates.
+
+        Returns:
+            list: list of clipped blocks.
+        """
+
         # check the parameter.
         if start < 0:
             raise ValueError()
@@ -438,7 +605,7 @@ class BlockTools(object):
 
         # The limited range for extend.
         template_start = 0
-        template_end = None
+        template_end: "int | None" = None
         if template is not None:
             template_start = template[0][0]
             template_end = template[-1][1]
@@ -449,24 +616,24 @@ class BlockTools(object):
 
         # The limited range for supply.
         limited_start = 0
-        limited_end = None
-        if limited:
+        limited_end = 0
+        if limited is not None:
             limited_start, limited_end = limited
         if limited_start:
             assert limited_start <= origin_start
-            assert limited_end <= template_start
+            assert template_start <= limited_end
             assert limited_start <= target_start
         if limited_end:
             assert limited_end >= origin_end
-            if template_end:
+            if template_end is not None:
                 assert limited_end >= template_end
             assert limited_end >= target_end
 
-        array_core = []
-        array_extend_left = []
-        array_extend_right = []
-        array_supply_left = []
-        array_supple_right = []
+        array_core: "list[tuple[int, int]]" = []
+        array_extend_left: "list[tuple[int, int]]" = []
+        array_extend_right: "list[tuple[int, int]]" = []
+        array_supply_left: "list[tuple[int, int]]" = []
+        array_supple_right: "list[tuple[int, int]]" = []
 
         for block_start, block_end in blocks:
             if block_end <= target_start:
@@ -500,9 +667,13 @@ class BlockTools(object):
             if template is None:
                 array_extend_right = [(origin_end, target_end)]
             else:
+                # Bound to a local so the assert below does not narrow
+                # the Optional type of template_end itself.
+                template_end1 = template_end
+                assert template_end1 is not None
                 array_extend_right = cls.clip(blocks=template,
                                               start=origin_end,
-                                              end=min(template_end, target_end))
+                                              end=min(template_end1, target_end))
             if (template_end is not None) and (target_end > template_end) and supply_right:
                 array_supple_right.append((template_end, target_end))
 
@@ -512,8 +683,28 @@ class BlockTools(object):
         return array
 
     @classmethod
-    def extend(cls, blocks, left=0, right=0, template=None, extend=False, supply=False, trim=False,
-               valid=None, suture=False):
+    def extend(cls, blocks: "Sequence[Sequence[int]]", left: int = 0, right: int = 0,  # pyright: ignore[reportUnusedParameter]
+               template: "Sequence[Sequence[int]] | None" = None, extend: bool = False, supply: bool = False,  # pyright: ignore[reportUnusedParameter]
+               trim: bool = False, valid: "tuple[int, int] | None" = None, suture: bool = False) -> "list[tuple[int, int]]":  # pyright: ignore[reportUnusedParameter]
+        """Extend the blocks towards left and/or right. (Not implemented yet.)
+
+        Args:
+            blocks (list): list of blocks.
+            left (int, optional): steps to extend towards left. Defaults to 0.
+            right (int, optional): steps to extend towards right. Defaults to 0.
+            template (list, optional): template blocks for extension. Defaults to None.
+            extend (bool, optional): extend with template blocks if possible. Defaults to False.
+            supply (bool, optional): supply with plain blocks if template is exhausted. Defaults to False.
+            trim (bool, optional): trim to the valid range instead of raising. Defaults to False.
+            valid (tuple, optional): valid range (start, end) for the extension. Defaults to None.
+            suture (bool, optional): suture the result blocks. Defaults to False.
+
+        Raises:
+            NotImplementedError: Always.
+
+        Returns:
+            list: new list of extended blocks.
+        """
         raise NotImplementedError()
 
         # assert isinstance(blocks, list)

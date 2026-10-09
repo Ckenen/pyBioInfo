@@ -2,7 +2,7 @@
 import os
 import unittest
 import filecmp
-from pyBioInfo.Range import IRange, GRange
+from pyBioInfo.Range import GRange
 from pyBioInfo.IO.File import FastaFile
 
 DIR = os.path.dirname(__file__)

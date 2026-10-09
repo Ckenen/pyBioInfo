@@ -1,146 +1,194 @@
-import os, logging
-from pyBioInfo.Range import GRange
-from .base import BaseFile
+# Class: PairFile (reader of PAIR format files)
+
 import gzip
+import sys
+from collections.abc import Iterator
+from typing import TextIO, cast
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing import Callable  # pyright: ignore[reportUnreachable]
+
+    def override(func: Callable) -> Callable:
+        """No-op fallback for Python < 3.12 compatibility."""
+        return func
+
+from .base import BaseFile
+from ...Range import CRange
 
 
-class PairRange(GRange):
-    def __init__(self, name, chrom1, start1, end1, strand1, chrom2, start2, end2, strand2, score1=None, score2=None):
-        super(PairRange, self).__init__(chrom=chrom1, start=start1, end=end1, strand=strand1, name=name)
-        self.chrom1 = chrom1
-        self.start1 = start1
-        self.end1 = end1
-        self.strand1 = strand1
-        self.chrom2 = chrom2
-        self.start2 = start2
-        self.end2 = end2
-        self.strand2 = strand2
-        self.score1 = score1
-        self.score2 = score2
-        self.additions = None
-        
-    def __str__(self):
-        return "%s:%d-%d(%s)|%s:%d-%d(%s)" % (
-            self.chrom1, self.start1, self.end1, self.strand1, 
-            self.chrom2, self.start2, self.end2, self.strand2)
-        
-    def format(self, fmt="pair"):
-        if fmt == "pair":
-            items = [
-                self.name, 
-                self.chrom1, 
-                self.start1 + 1, 
-                self.chrom2, 
-                self.start2 + 1,
-                self.strand1, 
-                self.strand2, 
-                "." if self.score1 is None else self.score1, 
-                "." if self.score2 is None else self.score2,
-                self.end1 - self.start1,
-                self.end2 - self.start2]
-            if self.additions is not None:
-                items = items + self.additions
-            return "\t".join(map(str, items))
-        raise ValueError()
-        
-    
+class PairRange(CRange):
+    """
+    PairRange is a class for a single record of PAIR files.
+
+    A PAIR record describes the two ends of a contact (e.g. a Hi-C
+    read pair) with their coordinates, strands, mapqs and counts.
+    """
+
+    def __init__(self, chrom1: str, start1: int, end1: int, strand1: str,
+                 chrom2: str, start2: int, end2: int, strand2: str,
+                 mapq1: int, mapq2: int, count: int = 1) -> None:
+        """
+        Initialize a pair record.
+
+        :param chrom1: Chromosome name of the first end.
+        :param start1: Start of the first end (0-based, inclusive).
+        :param end1: End of the first end (0-based, exclusive).
+        :param strand1: Strand of the first end ("+" or "-").
+        :param chrom2: Chromosome name of the second end.
+        :param start2: Start of the second end (0-based, inclusive).
+        :param end2: End of the second end (0-based, exclusive).
+        :param strand2: Strand of the second end ("+" or "-").
+        :param mapq1: Mapping quality of the first end.
+        :param mapq2: Mapping quality of the second end.
+        :param count: Number of contacts represented by the record.
+        """
+        super(PairRange, self).__init__(chrom=chrom1, start=start1, end=end1,
+                                        strand=strand1)
+        self.chrom2: str = chrom2
+        self.start2: int = start2
+        self.end2: int = end2
+        self.strand2: str = strand2
+        self.mapq1: int = mapq1
+        self.mapq2: int = mapq2
+        self.count: int = count
+
+    @override
+    def format(self, fmt: str = "pair") -> str:  # pyright: ignore[reportIncompatibleMethodOverride]
+        """
+        Format the record as a line of the given text format.
+
+        :param fmt: Format name, case-insensitive; only "pair" is
+                    supported.
+        :return: Tab-separated PAIR line.
+        :raises NotImplementedError: If the format is unsupported.
+        """
+        fmt = fmt.upper()
+        if fmt == "PAIR":
+            return "%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%d\t%d\t%d\n" % (
+                self.chrom, self.start, self.end, self.strand,
+                self.chrom2, self.start2, self.end2, self.strand2,
+                self.mapq1, self.mapq2, self.count)
+        else:
+            raise NotImplementedError("Format %s is not supported!" % fmt)
+
+    @override
+    def __str__(self) -> str:
+        """Format the record as a PAIR line."""
+        return self.format(fmt="PAIR")
+
+
 class PairFile(BaseFile):
-    def __init__(self, path, mode="rb", random=None):
-        if mode[0] == "r" and random is None:
-            if path.endswith(".pairs.gz"):
-                if os.path.exists(path + ".px2"):
-                    logging.warning("Index file exists, automatic set random=True")
-                    random = True
-                else:
-                    logging.warning("Index file does not exists, automatic set random=False")
-                    random = False
-            else:
-                random = False
-        
-        if random:
-            assert path.endswith(".pairs.gz")
-            assert os.path.exists(path)
-            assert os.path.exists(path + ".px2")
-        assert mode == "rb" or mode == "wb"
-        self._references = None
-        self._random = random
+    """
+    PairFile is a class for reading PAIR files.
+
+    Plain text PAIR and gzip-compressed PAIR (``.pair.gz``) are
+    supported. Records are read sequentially (iteration), optionally
+    filtered by a mapping-quality threshold.
+    """
+
+    # Attributes assigned by the untyped BaseFile base class; declared
+    # here to keep their types known.
+    _path: str
+    _mode: str
+    _handle: "TextIO | None"
+
+    def __init__(self, path: str, mode: str = "rb",
+                 mapq: int = 255) -> None:
+        """
+        Initialize and open a PAIR file object.
+
+        :param path: Path to the PAIR (or compressed .pair.gz) file.
+        :param mode: File mode; only "rb" (reading) is supported.
+        :param mapq: Minimum mapping quality of both ends for a record
+                     to be yielded by :py:meth:`fetch`.
+        :raises NotImplementedError: If the mode is unsupported.
+        :raises AssertionError: If the mode is invalid.
+        """
+        assert mode == "rb" or mode == "wb", "Mode %s is not supported!" % mode
+        if mode == "wb":
+            raise NotImplementedError("Writing is not supported!")
         super(PairFile, self).__init__(path, mode)
+        self._mapq: int = mapq
         self.open()
-        
-    def open(self):
+
+    @property
+    def mapq(self) -> int:
+        """Minimum mapping-quality threshold."""
+        return self._mapq
+
+    @override
+    def open(self) -> None:
+        """
+        Open the underlying file handle.
+
+        Calling open on an already-opened file is a no-op.
+
+        :raises ValueError: If the mode is unsupported.
+        """
         if self._handle is None:
-            if self.mode == "rb":
-                self._handle = gzip.open(self.path, "rt")
-            elif self.mode == "wb":
-                assert False
+            if self._mode == "rb":
+                if self._path.endswith(".gz"):
+                    self._handle = cast("TextIO", gzip.open(self._path, "rt"))
+                else:
+                    self._handle = open(self._path)
             else:
-                raise RuntimeError()
-    
-    def close(self):
-        if self._handle:
+                raise ValueError("Mode %s is not supported!" % self._mode)
+
+    @override
+    def close(self) -> None:
+        """
+        Close the underlying file handle.
+
+        Calling close on an already-closed file is a no-op, so that
+        explicit close followed by ``__del__`` does not raise.
+        """
+        if self._handle is not None:
             self._handle.close()
-            self._handle = None
-            
-    def fetch(self, chrom1=None, start1=None, end1=None, chrom2=None, start2=None, end2=None):
-        if self._random:
-            query = None
-            if chrom1 is None:
-                if chrom2 is None:
-                    for line in self.handle:
-                        yield self.parse_line(line)
-                else:
-                    if start2 is None:
-                        start2 = 0
-                    if end2 is None:
-                        end2 = 999999999
-                    query = "|%s:%d-%d" % (chrom2, start2, end2)
-            else:
-                if chrom2 is None:
-                    if start1 is None:
-                        start1 = 0
-                    if end1 is None:
-                        end1 = 999999
-                    query = "%s:%d-%d|%" % (chrom1, start1, end1)
-                else:
-                    if start1 is None:
-                        start1 = 0
-                    if end1 is None:
-                        end1 = 999999
-                    if start2 is None:
-                        start2 = 0
-                    if end2 is None:
-                        end2 = 999999999
-                    query = "%s:%d-%d|%s:%d-%d" % (chrom1, start1, end1, chrom2, start2, end2)
-            if query is not None:
-                raise NotImplementedError()
-        else:
-            if chrom1 is None and start1 is None and end1 is None \
-                and chrom2 is None and start2 is None and end2 is None:
-                for line in self.handle:
-                    yield self.parse_line(line)
-            else:
-                raise RuntimeError("Random access is not supported! Please set random=True.")
-    
-    @classmethod
-    def parse_line(cls, x):
-        if isinstance(x, str):
-            row = x.strip().split("\t")
-        elif isinstance(x, list):
-            row = x
-        else:
-            raise RuntimeError()
-        name = row[0]
-        chrom1, start1 = row[1], int(row[2]) - 1
-        chrom2, start2 = row[3], int(row[4]) - 1
-        strand1, strand2 = row[5], row[6]
-        score1 = None if row[7] == "." else int(row[7])
-        score2 = None if row[8] == "." else int(row[8])
-        length1, length2 = int(row[9]), int(row[10])
-        end1, end2 = start1 + length1, start2 + length2
-        pr = PairRange(name=name, 
-                       chrom1=chrom1, start1=start1, end1=end1, strand1=strand1, score1=score1, 
-                       chrom2=chrom2, start2=start2, end2=end2, strand2=strand2, score2=score2)
-        if len(row) > 11:
-            pr.additions = row[11:]
-        return pr
-        
+            # Note: the narrowed handle type is intentionally incompatible
+            # with the heterogeneous "IO[Any] | None" of the base class.
+            self._handle = None  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    @override
+    def fetch(self) -> "Iterator[PairRange]":
+        """
+        Fetch the records of the file sequentially.
+
+        Records whose both ends have a mapping quality below the
+        :py:attr:`mapq` threshold are skipped.
+
+        :raises RuntimeError: If the file is not opened.
+        :return: Iterator of PairRange objects.
+        """
+        handle = self._handle
+        assert handle is not None, "File is not opened!"
+        for line in handle:
+            row = line.strip("\n").split("\t")
+            assert len(row) == 11
+            if int(row[8]) < self._mapq and int(row[9]) < self._mapq:
+                continue
+            chrom1 = row[0]
+            start1 = int(row[1])
+            end1 = int(row[2])
+            strand1 = row[3]
+            chrom2 = row[4]
+            start2 = int(row[5])
+            end2 = int(row[6])
+            strand2 = row[7]
+            mapq1 = int(row[8])
+            mapq2 = int(row[9])
+            count = int(row[10])
+            record = PairRange(chrom1, start1, end1, strand1,
+                               chrom2, start2, end2, strand2,
+                               mapq1, mapq2, count)
+            yield record
+
+    def write(self, record: PairRange) -> None:  # pyright: ignore[reportUnusedParameter]
+        """
+        Write a pair record to the file.
+
+        :param record: The PairRange to write.
+        :raises NotImplementedError: Always; writing is not supported.
+        """
+        raise NotImplementedError("Writing is not supported!")
