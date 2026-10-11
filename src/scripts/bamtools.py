@@ -40,7 +40,9 @@ def main():
     _ = sub_parser.add_argument("-i", "--input", help="Input BAM file")
     _ = sub_parser.add_argument("-o", "--output", help="Output TSV/CSV file")
     _ = sub_parser.add_argument("-p", "--primary-only", type=bool, default=False, help="Only count primary alignments")
-    _ = sub_parser.add_argument("-P", "--proper-pair-only", type=bool, default=False, help="Only count proper pair alignments")
+    _ = sub_parser.add_argument("-P", "--proper-pair-only", type=bool, default=False, help="Only count proper-pair alignments")
+    _ = sub_parser.add_argument("-u", "--uniq-mapped-only", type=bool, default=False, help="Only count uniq-mapped alignments")
+    # _ = sub_parser.add_argument("-d", "--ignore-pcr-duplicate", type=bool, default=False, help="Ignore PCR duplicate")
 
 
     args = parser.parse_args()

@@ -236,7 +236,7 @@ class Add_NH_HI_Tag_Worker(object):
         logging.info("Number of both mapped segments: %d (%.6f)" % (num_both_mapped, num_both_mapped / num_total))
         logging.info("Number of proper-paired segments: %d (%.6f)" % (num_proper_mapped, num_proper_mapped / num_total))
         logging.info("Number of output paired segments: %d (%.6f)" % (num_wrote_pairs * 2, num_wrote_pairs * 2 / num_total))
-        
+
     @classmethod            
     def add_nh_hi_tag(cls, input_bam: str, output_bam: str, proper_pair: bool, summary_tsv: str) -> None:
         layout = cls.detect_layout(input_bam)
@@ -425,11 +425,13 @@ class BamTools(object):
         outfile = cast(str, args.output)
         primary_only = cast(bool, args.primary_only)
         proper_pair_only = cast(bool, args.proper_pair_only)
+        uniq_mapped_only = cast(bool, args.uniq_mapped_only)
 
         logging.info(f"Input BAM: {bamfile}")
         logging.info(f"Output TSV: {outfile}")
         logging.info(f"Require primary only: {primary_only}")
         logging.info(f"Require proper pair: {proper_pair_only}")
+        logging.info(f"Require uniq mapped: {uniq_mapped_only}")
 
         rows = []
 
@@ -445,6 +447,13 @@ class BamTools(object):
                             continue
                         if s.is_supplementary:
                             continue
+
+                    if uniq_mapped_only:
+                        if s.has_tag("NH"):
+                            if s.get_tag("NH") != 1:
+                                continue
+                        else:
+                            raise RuntimeError("NH tag not found")
 
                     if s.is_paired:
                         if proper_pair_only and not s.is_proper_pair:

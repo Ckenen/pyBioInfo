@@ -1,70 +1,42 @@
 #!/usr/bin/env python
-import os
 import argparse
-
-class FastqTools(object):
-    @staticmethod
-    def dedup(args):
-        threads = args.threads
-        paths = args.in_and_out
-        infile1 = infile2 = outfile1 = outfile2 = None
-        if len(paths) == 2:
-            infile1, outfile1 = paths
-        elif len(paths) == 4:
-            infile1, infile2, outfile1, outfile2 = paths
-        else:
-            exit(1)
-        
-        tmpdir = outfile1 + ".tmp"
-        os.makedirs(tmpdir, exist_ok=True)
-        
-        # fastq -> txt
-        
-        # sort txt
-        
-        # txt -> fastq
-        
-        # clean
-        
-        exit(1)
-    
-        
-    @staticmethod
-    def fastq2row(args):
-        pass
-    
-    
-    @staticmethod
-    def row2fastq(args):
-        pass
-    
+from typing import cast
+from pyBioInfo.Tools.fastqtools import FastqTools
 
 def main():
     parser = argparse.ArgumentParser(description="A toolkit to process FAM file")
 
     subparsers = parser.add_subparsers(title="Available subcommands",dest="command")
 
-    dedup_parser = subparsers.add_parser("dedup", help="Dedup FASTQ files", description="Dedup FASTQ files.")
-    dedup_parser.add_argument("in_and_out", nargs="+", help="Input and output FASTQ files")
-    dedup_parser.add_argument("-@", "--threads", type=int, default=4, help="Number of threads (default: 4)")
-    dedup_parser.set_defaults(func=FastqTools.dedup)
+    parser2 = subparsers.add_parser("fastq-to-txt", help="Convert FASTQ file to TXT file", description="Convert FASTQ file to TXT file")
+    _ = parser2.add_argument("-1", "--input1", metavar="PATH", help="Input FASTQ file. (stdin, text or gzip)")
+    _ = parser2.add_argument("-2", "--input2", metavar="PATH", help="Input FASTQ file of read 2 (text or gzip)")
+    _ = parser2.add_argument("-o", "--output", metavar="PATH", help="Output TXT file (stdout, text or gzip)")
 
-    # split_parser = subparsers.add_parser("split", help="Split FAM file by seqname", description="Split FAM file by seqname.")
-    # split_parser.add_argument("in.fam", help="Input FAM file")
-    # split_parser.add_argument("outdir", help="Output directory")
-    # split_parser.set_defaults(func=FamTools.split)
+    parser2 = subparsers.add_parser("dedup-fastq", help="Dedup FASTQ file", description="Dedup FASTQ file")
+    _ = parser2.add_argument("-1", "--input1", metavar="PATH", help="Input FASTQ file. (text or gzip)")
+    _ = parser2.add_argument("-2", "--input2", metavar="PATH", help="Input FASTQ file of read 2. (text or gzip)")
+    _ = parser2.add_argument("-o", "--output1", metavar="PATH", help="Output FASTQ file. (text or gzip)")
+    _ = parser2.add_argument("-p", "--output2", metavar="PATH", help="Output FASTQ file of read2. (text or gzip)")
+    _ = parser2.add_argument("-t", "--threads", type=int, default=4, help="Number of threads")
 
-    # merge_parser = subparsers.add_parser("merge", help="Merge splitted FAM files", description="Merge splitted FAM files.")
-    # merge_parser.add_argument("input", help="Input SAM/BAM file")
-    # merge_parser.set_defaults(func=FamTools.merge)
+    parser2 = subparsers.add_parser("txt-to-fastq", help="Convert TXT file to FASTQ file", description="Convert TXT file to FASTQ file")
+    _ = parser2.add_argument("-i", "--input", metavar="PATH", help="Input TXT file. (stdin, text or gzip)")
+    _ = parser2.add_argument("-o", "--output1", metavar="PATH", help="Output FASTQ file. (text or gzip)")
+    _ = parser2.add_argument("-p", "--output2", metavar="PATH", help="Output FASTQ file of read2. (text or gzip)")
+    _ = parser2.add_argument("-t", "--threads", type=int, default=4, help="Number of threads")
 
     args = parser.parse_args()
-
-    if args.command is None:
+    command = cast(str | None, args.command)
+    if command is None:
         parser.print_help()
         return
-
-    args.func(args)    
+    dispatch = {
+        "fastq-to-txt": FastqTools.fastq_to_txt,
+        "dedup-fastq": FastqTools.dedup_fastq,
+        "txt-to-fastq": FastqTools.txt_to_fastq,
+    }
+    dispatch[command](args)
 
 if __name__ == "__main__":
     main()
